@@ -13,7 +13,7 @@ source("SWFSC_Stranding_fcns.R")
 # get Species table from Common 
 Common.con <- connection.string("SWFSCCommon") 
 Common  <- odbcDriverConnect(Common.con)
-on.exit(odbcClose(Common))  # close connection if R crashes
+#on.exit(odbcClose(Common))  # close connection if R crashes
 
 Common.tables <- sqlTables(Common) %>%
   filter(TABLE_TYPE == "TABLE")
@@ -25,10 +25,12 @@ Common %>%
          SpName, SpCode) %>%
   mutate(SpeciesID = SpCode) -> tbl.Species
 
+odbcClose(Common)
+
 # Get the lifehistory database
 MMLH.con <- connection.string("MMLH") 
 MMLH.2019 <- odbcDriverConnect(MMLH.con)
-on.exit(odbcClose(MMLH.2019))  # close connection if R crashes
+#on.exit(odbcClose(MMLH.2019))  # close connection if R crashes
 MMLH.info <- odbcGetInfo(MMLH.2019)
 MMLH.tables <- sqlTables(MMLH.2019)
 
@@ -42,7 +44,7 @@ MMLH.2019 %>%
          Longitude_Precision_Unit, SpeciesID) %>%
   left_join(tbl.Species, by = "SpeciesID")-> tbl.Animal
 
-# Select Delphinus
+# Select Delphinus and Tursiops
 tbl.Animal %>%
   filter(Genus == "Delphinus" |
          Genus == "Tursiops") -> tbl.Animal.dolphins
@@ -71,22 +73,25 @@ tbl.dolphins.morphology.age %>%
 tbl.dolphins.morphology.age %>%
   filter(IsStandardTL_LAB == "N" | IsStandardTL_FIELD == "N") -> tbl.dolphins.NoStandardTL
 
-# Craete a linear model to predict the STL from other measurements:
+# Create a linear model to predict the STL from other measurements:
 # Doesn't work because so many missing data... 
-lm.STL.1 <- lm(TotalLength_FIELD ~ STOANUS + STOGENSLIT + STOUMBIL + STOTHRGROO + STODOFINTIP + STOANTDOR + STOFLIPPER + STOEAR + STOEYE + STOGAPE + STOBLOHOLE + STOMELAPEX + GIRTHMAX,
-               data = tbl.dolphins.StandardTL)
+# lm.STL.1 <- lm(TotalLength_FIELD ~ STOANUS + STOGENSLIT + STOUMBIL + STOTHRGROO + STODOFINTIP + STOANTDOR + STOFLIPPER + STOEAR + STOEYE + STOGAPE + STOBLOHOLE + STOMELAPEX + GIRTHMAX,
+#                data = tbl.dolphins.StandardTL)
 
 
 MMLH.2019 %>%
   sqlQuery('select * from tbl_Reproduction') -> tbl.Reproduction
 
-
+odbcClose(MMLH.2019)
 
 Tissue.con <- connection.string("TissueArchive")
 Tissue  <- odbcDriverConnect(Tissue.con)
-on.exit(odbcClose(Tissue))  # close connection if R crashes
+
+#on.exit(odbcClose(Tissue))  # close connection if R crashes
+odbcClose(Tissue)
 
 
+# in case there are stray databases open:
 odbcCloseAll()
 
 
