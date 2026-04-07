@@ -8,11 +8,7 @@ library(tidyverse)
 library(readr)
 library(ggplot2)
 
-connection.string <- function(database){
-  return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-s;Database=",
-                database, ";Trusted_Connection=yes;TrustServerCertificate=yes;"))
-  
-}
+source("SWFSC_Stranding_fcns.R")
 
 # get Species table from Common 
 Common.con <- connection.string("SWFSCCommon") 
