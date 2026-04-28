@@ -41,7 +41,7 @@ MMLH.2019 %>%
   sqlQuery('select * from tbl_Animal') %>%
   select(Specimen, Year, Month, Day, Latitude, Latitude_Precision,
          Latitude_Precision_Unit, Longitude, Longitude_Precision,
-         Longitude_Precision_Unit, SpeciesID) %>%
+         Longitude_Precision_Unit, SpeciesID, Sex) %>%
   left_join(tbl.Species, by = "SpeciesID")-> tbl.Animal
 
 # Select Delphinus and Tursiops
@@ -81,6 +81,13 @@ tbl.dolphins.morphology.age %>%
 
 MMLH.2019 %>%
   sqlQuery('select * from tbl_Reproduction') -> tbl.Reproduction
+
+MMLH.2019 %>%
+  sqlQuery('select * from tbl_Teeth') -> tbl.Teeth
+
+MMLH.2019 %>%
+  sqlQuery('select * from tbl_Gonads') -> tbl.Gonads
+
 
 odbcClose(MMLH.2019)
 
