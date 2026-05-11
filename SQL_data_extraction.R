@@ -18,17 +18,35 @@ Common  <- odbcDriverConnect(Common.con)
 Common.tables <- sqlTables(Common) %>%
   filter(TABLE_TYPE == "TABLE")
 
+Common.table.names <- c("Country", "County", "State", "City", "Species")
+
+Common.table.list <- list()
+for (k in 1:length(Common.table.names)){
+  table.name <- paste0("tbl", Common.table.names[k])
+  Common %>%
+    sqlQuery(paste0("select * from ", table.name)) -> Common.table.list[[k]]
+  
+    select.col <- Common.table.list[[k]] %>% dplyr::select(-c(ts))
+
+  write.csv(select.col,
+            file = paste0("Data/", table.name, "_", Sys.Date(), ".csv"),
+            quote = FALSE,
+            row.names = FALSE)
+  
+}
+
 Common %>%
   sqlQuery('select * from tblSpecies') %>% #-> tmp
   #filter(SubOrder == "CETACEA") %>%
-  select(ID, SubOrder, Genus, Species, CommonName,
-         SpName, SpCode) %>%
-  mutate(SpeciesID = SpCode) -> tbl.Species
+  select(-c(Comments, ts)) -> tbl.Species
+
+write.csv(tbl.Species,
+          file = paste0("Data/tblSpecies_", Sys.Date(), ".csv"),
+          quote = FALSE,
+          row.names = FALSE)
 
 odbcClose(Common)
 
-write.csv(tbl.Species,
-          file = paste0("Data/table_species_", Sys.Date(), ".csv"))
 
 # Get the lifehistory database
 MMLH.con <- connection.string("MMLH") 
@@ -40,19 +58,27 @@ MMLH.tables <- sqlTables(MMLH.2019)
 MMLH.tables %>%
   filter(TABLE_TYPE == "TABLE") -> MMLH.table.names
 
-table.names <- c("Animal", "Morphology", "Age", "Reproduction",
-                 "Teeth", "Gonads", "Bone", "Code_Maturity",
-                 "InvOsteology")
+table.names <- c("_Animal", "_Morphology", "_Age", "_Reproduction",
+                 "_InvTeeth", "_InvGonad", "_Bone", "Code_Maturity",
+                 "_InvOsteology")
 
 table.list <- list()
 
 for (k in 1:length(table.names)){
-  table.name <- paste0("tbl_", table.names[k])
+  table.name <- paste0("tbl", table.names[k])
   MMLH.2019 %>%
     sqlQuery(paste0("select * from ", table.name)) -> table.list[[k]]
   
-  # write.csv(table.list[[k]],
-  #           file = paste0("Data/", table.name, "_", Sys.Date(), ".csv"))
+  if (length((grep("^rv", colnames(table.list[[k]])))) == 0){
+    select.col <- table.list[[k]] %>% dplyr::select(-c(Comments))
+  } else {
+    select.col <- table.list[[k]] %>% dplyr::select(-c(Comments, rv))
+  }
+    
+  write.csv(select.col,
+            file = paste0("Data/", table.name, "_", Sys.Date(), ".csv"),
+            quote = FALSE,
+            row.names = FALSE)
   
 }
 
