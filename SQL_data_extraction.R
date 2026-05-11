@@ -27,6 +27,9 @@ Common %>%
 
 odbcClose(Common)
 
+write.csv(tbl.Species,
+          file = paste0("Data/table_species_", Sys.Date(), ".csv"))
+
 # Get the lifehistory database
 MMLH.con <- connection.string("MMLH") 
 MMLH.2019 <- odbcDriverConnect(MMLH.con)
@@ -37,8 +40,26 @@ MMLH.tables <- sqlTables(MMLH.2019)
 MMLH.tables %>%
   filter(TABLE_TYPE == "TABLE") -> MMLH.table.names
 
-MMLH.2019 %>%
-  sqlQuery('select * from tbl_Animal') %>%
+table.names <- c("Animal", "Morphology", "Age", "Reproduction",
+                 "Teeth", "Gonads", "Bone", "Code_Maturity",
+                 "InvOsteology")
+
+table.list <- list()
+
+for (k in 1:length(table.names)){
+  table.name <- paste0("tbl_", table.names[k])
+  MMLH.2019 %>%
+    sqlQuery(paste0("select * from ", table.name)) -> table.list[[k]]
+  
+  # write.csv(table.list[[k]],
+  #           file = paste0("Data/", table.name, "_", Sys.Date(), ".csv"))
+  
+}
+
+names(table.list) <- table.names
+
+# The following will not work - need to pull out by names 2026-05-11
+table.list[[grep("Animal", table.names)]] %>%
   select(Specimen, Year, Month, Day, Latitude, Latitude_Precision,
          Latitude_Precision_Unit, Longitude, Longitude_Precision,
          Longitude_Precision_Unit, SpeciesID, Sex) %>%
@@ -49,8 +70,7 @@ tbl.Animal %>%
   filter(Genus == "Delphinus" |
          Genus == "Tursiops") -> tbl.Animal.dolphins
 
-MMLH.2019 %>%
-  sqlQuery('select * from tbl_Morphology') %>% #-> tmp
+table.list[[grep("Morphology", table.names)]] %>%
   select(Specimen, IsStandardTL_LAB, TotalLength_LAB, 
          IsStandardTL_FIELD, TotalLength_FIELD, STOANUS,
          STOGENSLIT, STOUMBIL, STOTHRGROO, STODOFINTIP,
@@ -60,8 +80,7 @@ MMLH.2019 %>%
 tbl.Animal.dolphins %>%
   left_join(tbl.Morphology, by = "Specimen") -> tbl.dolphins.morphology
 
-MMLH.2019 %>%
-  sqlQuery('select * from tbl_Age') %>%
+table.list[[grep("Age", table.names)]] %>%
   select(-c(Comments, EditDate, EditUser, RecordCreationDate)) -> tbl.Age
 
 tbl.dolphins.morphology %>%
@@ -77,17 +96,6 @@ tbl.dolphins.morphology.age %>%
 # Doesn't work because so many missing data... 
 # lm.STL.1 <- lm(TotalLength_FIELD ~ STOANUS + STOGENSLIT + STOUMBIL + STOTHRGROO + STODOFINTIP + STOANTDOR + STOFLIPPER + STOEAR + STOEYE + STOGAPE + STOBLOHOLE + STOMELAPEX + GIRTHMAX,
 #                data = tbl.dolphins.StandardTL)
-
-
-MMLH.2019 %>%
-  sqlQuery('select * from tbl_Reproduction') -> tbl.Reproduction
-
-MMLH.2019 %>%
-  sqlQuery('select * from tbl_Teeth') -> tbl.Teeth
-
-MMLH.2019 %>%
-  sqlQuery('select * from tbl_Gonads') -> tbl.Gonads
-
 
 odbcClose(MMLH.2019)
 
