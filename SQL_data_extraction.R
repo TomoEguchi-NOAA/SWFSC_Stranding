@@ -18,7 +18,7 @@ Common  <- odbcDriverConnect(Common.con)
 Common.tables <- sqlTables(Common) %>%
   filter(TABLE_TYPE == "TABLE")
 
-Common.table.names <- c("Country", "County", "State", "City", "Species")
+Common.table.names <- c("Country", "County", "State", "City")
 
 Common.table.list <- list()
 for (k in 1:length(Common.table.names)){
@@ -38,7 +38,7 @@ for (k in 1:length(Common.table.names)){
 Common %>%
   sqlQuery('select * from tblSpecies') %>% #-> tmp
   #filter(SubOrder == "CETACEA") %>%
-  select(-c(Comments, ts)) -> tbl.Species
+  select(-c(Comments, ts, NomenclatureAuthority)) -> tbl.Species
 
 write.csv(tbl.Species,
           file = paste0("Data/tblSpecies_", Sys.Date(), ".csv"),
@@ -58,12 +58,15 @@ MMLH.tables <- sqlTables(MMLH.2019)
 MMLH.tables %>%
   filter(TABLE_TYPE == "TABLE") -> MMLH.table.names
 
+# Table names with 'Inv' hold inventory records, which are not very useful for 
+# looking at data. "_InvTeeth", "_InvGonad", "_InvOsteology"
+
 table.names <- c("_Animal", "_Morphology", "_Age", "_Reproduction",
-                 "_InvTeeth", "_InvGonad", "_Bone", "Code_Maturity",
-                 "_InvOsteology")
+                  "_Bone", "_Weight", "Code_Maturity")
 
 table.list <- list()
 
+k <- 6
 for (k in 1:length(table.names)){
   table.name <- paste0("tbl", table.names[k])
   MMLH.2019 %>%

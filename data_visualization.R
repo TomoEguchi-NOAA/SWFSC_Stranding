@@ -8,26 +8,31 @@ library(tidyverse)
 library(ggplot2)
 library(readr)
 
-age.col.types <- cols(ID = col_integer(),
-                      Specimen = col_character(),
-                      Age = col_double(),
-                      IsAnalysisQuality = col_factor(levels = c("Y", "N")),
-                      EstimationMethod = col_factor(),
-                      AgeReader1 = col_double(), 
-                      ReaderID1 = col_integer(),
-                      AgeReader2 = col_double(),
-                      ReaderID2 = col_integer(),
-                      AgeReader3 = col_double(),
-                      ReaderID3 = col_integer(),
-                      AgeReader4 = col_double(),
-                      ReaderID4 = col_integer(),
-                      EditDate = col_datetime(),
-                      EditUser = col_character(),
-                      RecordCreationDate= col_datetime())
+data.extraction.date <- "2026-05-11"
 
-table.Age <- read_csv(file = "Data/tbl_Age_2026-05-11.csv",
-                        col_types = age.col.types)
+table.names <- c("_Animal", "_Morphology", "_Age", "_Reproduction",
+                 "_Bone", "Code_Maturity")
 
+species.col.types <- cols(ID = col_integer(),
+                          TaxanomicOrder = col_character(),
+                          SubOrder = col_character(),
+                          InfraOrder = col_character(),
+                          Family = col_character(),
+                          FamilyCommonName = col_character(),
+                          Genus = col_character(),
+                          Species = col_character(),
+                          Subspecies = col_character(),
+                          CommonName = col_character(),
+                          SpType = col_character(),
+                          SpName = col_character(),
+                          SpCode = col_character(),
+                          AerialFisheryCode = col_character(),
+                          BirderCode = col_character(),
+                          AlternateCode1 = col_character(),
+                          AlternateCode2 = col_character(),
+                          EditDate = col_datetime(),
+                          EditUser = col_character(),
+                          RecordCreationDate = col_datetime())
 
 morph.col.types <- cols(Specimen = col_character(),
                         TotalLength_LAB = col_double(),
@@ -100,9 +105,6 @@ morph.col.types <- cols(Specimen = col_character(),
                         EditUser = col_character(),
                         RecordCreationDate = col_datetime())
 
-table.Morph <- read_csv(file = "Data/tbl_Morphology_2026-05-11.csv",
-                      col_types = morph.col.types)
-
 animal.col.types <- cols(Specimen = col_character(),
                         OriginID = col_integer(),
                         IsSWFSC = col_factor(levels = c("Y", "N", "y", "n")),
@@ -154,6 +156,141 @@ animal.col.types <- cols(Specimen = col_character(),
                         EditUser = col_character(),
                         RecordCreationDate = col_datetime())
 
+age.col.types <- cols(ID = col_integer(),
+                      Specimen = col_character(),
+                      Age = col_double(),
+                      IsAnalysisQuality = col_factor(levels = c("Y", "N")),
+                      EstimationMethod = col_factor(),
+                      AgeReader1 = col_double(), 
+                      ReaderID1 = col_integer(),
+                      AgeReader2 = col_double(),
+                      ReaderID2 = col_integer(),
+                      AgeReader3 = col_double(),
+                      ReaderID3 = col_integer(),
+                      AgeReader4 = col_double(),
+                      ReaderID4 = col_integer(),
+                      EditDate = col_datetime(),
+                      EditUser = col_character(),
+                      RecordCreationDate= col_datetime())
 
-table.Animal <- read_csv(file = "Data/tbl_Animal_2026-05-11.csv",
-                        col_types = animal.col.types)
+repro.col.types <- cols(Specimen = col_character(),
+                        IsSideKnown = col_factor(levels = c("Y", "N", "y", "n")),
+                        IsMature = col_factor(levels = c("Y", "N", "U", "y", "n", "u")),
+                        MaturityID = col_integer(),
+                        IsLactating = col_factor(levels = c("Y", "N", "y", "n")),
+                        IsPregnant = col_factor(levels = c("Y", "N", "y", "n")),
+                        Follicle_Diam = col_double(),
+                        OvaryWeight_R = col_double(),
+                        OvaryWeight_L = col_double(),
+                        OvaryLength_R = col_double(),
+                        OvaryWidth_R = col_double(),
+                        OvaryDepth_R = col_double(),
+                        OvaryLength_L = col_double(),
+                        OvaryWidth_L = col_double(),
+                        OvaryDepth_L = col_double(),
+                        CL_Diam1 = col_integer(),
+                        CL_Diam2 = col_integer(),
+                        CL_Diam3 = col_integer(),
+                        CL_InternalDiam1 = col_integer(),
+                        CL_InternalDiam2 = col_integer(),
+                        CA1_R = col_integer(),
+                        CA2_R = col_integer(),
+                        CA3_R = col_integer(),
+                        CA4_R = col_integer(),
+                        CA5_R = col_integer(),
+                        CA6_R = col_integer(),
+                        CA_RIGHT = col_integer(),
+                        CA1_L = col_integer(),
+                        CA2_L = col_integer(),
+                        CA3_L = col_integer(),
+                        CA4_L = col_integer(),
+                        CA5_L = col_integer(),
+                        CA6_L = col_integer(),
+                        CA_LEFT = col_integer(),
+                        TotalCorpora = col_integer(),
+                        CL_LocationID = col_integer(),
+                        FetusLength_Standard = col_double(),
+                        FetusLength_Curvilinear = col_double(),
+                        FetusSex = col_factor(levels = c("M", "F", "U", "m", "f", "u")),
+                        FetusWeight = col_double(),
+                        WeightWEpi_L = col_double(),
+                        WeightWEpi_R = col_double(),
+                        WeightWOEPI_R = col_double(),
+                        WeightWOEPI_L = col_double(),
+                        TestisLength_R = col_double(),
+                        TestisWidth_R = col_double(),
+                        TestisDepth_R = col_double(),
+                        TestisLength_L = col_double(),
+                        TestisWidth_L = col_double(),
+                        TestisDepth_L = col_double(),
+                        EditDate = col_datetime(),
+                        EditUser = col_character(),
+                        RecordCreationDate = col_datetime())
+
+weight.col.types <- cols(Specimen = col_character(),
+                         Adrenal_1 = col_double(),
+                         AdrenalSide_1 = col_character(),
+                         Adrenal_2 = col_double(),
+                         AdrenalSide_2 = col_character(),
+                         Blubber = col_double(),
+                         Brain = col_double(),
+                         Carcass_Intact = col_double(),
+                         Epaxial = col_double(),
+                         Heart = col_double(),
+                         Hypaxial = col_double(),
+                         Intestines = col_double(),
+                         Intestine_Length = col_double(),
+                         Kidney_R = col_double(),
+                         Kidney_L = col_double(),
+                         Liver = col_double(),
+                         Lung_R = col_double(),
+                         Lung_L = col_double(),
+                         Misc = col_double(),
+                         Muscle_Total = col_double(),
+                         Pancreas = col_double(),
+                         Spleen = col_double(),
+                         Stomach_Full = col_double(),
+                         Stomach_Empty = col_double(),
+                         Thymus = col_double(),
+                         Viscera = col_double(),
+                         EditDate = col_datetime(),
+                         EditUser = col_character(),
+                         RecordCreationDate = col_datetime())
+
+table.Species <- read_csv(file = paste0("Data/tblSpecies_", data.extraction.date, ".csv"),
+                          col_types = species.col.types)
+
+table.Morph <- read_csv(file = paste0("Data/tbl_Morphology_", data.extraction.date, ".csv"),
+                        col_types = morph.col.types)
+
+table.Animal <- read_csv(file = paste0("Data/tbl_Animal_", data.extraction.date, ".csv"),
+                         col_types = animal.col.types)
+
+
+table.Age <- read_csv(file = paste0("Data/tbl_Age_", data.extraction.date, ".csv"),
+                      col_types = age.col.types)
+
+table.Age %>%
+  filter(IsAnalysisQuality == "Y") %>%
+  left_join(table.Animal, by = "Specimen") -> table.Age.1
+
+table.Repro <- read_csv(file = paste0("Data/tbl_Reproduction_", data.extraction.date, ".csv"),
+                        col_types = repro.col.types)
+
+table.Weight <- read_csv(file = paste0("Data/tbl_Weight_", data.extraction.date, ".csv"),
+                        col_types = weight.col.types)
+
+# Remove a fin whale that had very small Lab measurement
+table.Morph  %>%
+  left_join(table.Weight, by = "Specimen") %>%
+  mutate(ratio = TotalLength_FIELD/TotalLength_LAB) %>%
+  filter(ratio < 2) -> table.Morph.1
+
+table.Morph %>%
+  left_join(table.Weight, by = "Specimen") -> table.Morph.2
+
+# table.Morph %>%
+#   filter(!is.na(TotalLength_FIELD)) %>%
+#   left_join(table.Animal, by = "Specimen")-> table.Morph.1
+
+
