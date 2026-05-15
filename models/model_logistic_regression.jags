@@ -1,0 +1,39 @@
+# Jags model to fit logistic curves to sexual maturity-age relationships
+# of Stenella with n.sp species (attenuata [1], coeruleoalba [2], and
+# longirostris [3]). 
+
+model {
+
+	for (i in 1:N) {
+		# Likelihood
+		mature[i] ~ dbern(p[i])
+    
+		# Linear predictor using the beta matrix
+		# species_idx[i] identifies which of the 3 species the sample belongs to
+		logit(p[i]) <- B[species_idx[i], 1] + B[species_idx[i], 2] * X[i]
+		loglik[i] <- logdensity.bern(mature[i], p[i])
+	}
+ 
+	# Hierarchical Prior for Species-level Effects
+	for (j in 1:n.sp) {
+		# Each species' [intercept, slope] is drawn from an MVN
+		B[j, 1:2] ~ dmnorm(mu_beta[1:2], Omega[1:2, 1:2])
+	}
+  
+	# Global Priors (Hyperpriors)
+	# Means for the global intercept and slope
+	mu_beta[1] ~ dnorm(0, 0.001)
+	mu_beta[2] ~ dnorm(0, 0.001)
+
+	# Wishart prior for the Precision Matrix (Omega)
+	# R is a guestimate of the scale matrix (Identity matrix is a common start)
+	# k is the degrees of freedom (typically number of variables + 1)
+	Omega[1:2, 1:2] ~ dwish(R[1:2, 1:2], 3)
+  
+	# Convert Precision Matrix back to Covariance Matrix for interpretation
+	Sigma[1:2, 1:2] <- inverse(Omega[1:2, 1:2])
+  
+	# Derived correlation between intercept and slope
+	rho <- Sigma[1, 2] / sqrt(Sigma[1, 1] * Sigma[2, 2])
+  
+}
