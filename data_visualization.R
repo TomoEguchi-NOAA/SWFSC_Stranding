@@ -7,290 +7,196 @@ rm(list = ls())
 library(tidyverse)
 library(ggplot2)
 library(readr)
+library(jagsUI)
+library(rstanarm)
+library(posterior)
+library(bayesplot)
 
+source("SWFSC_Stranding_fcns.R")
+options(mc.cores = 10)
+
+MCMC.params <- list(n.samples = 25000,
+                   n.thin = 100,
+                   n.burnin = 10000,
+                   n.chains = 5)
+
+# The database was accessed using SQL_data_extraction.R on the following date.
+# All tables were stored as .csv files - this decision might not have been the
+# best because there are some fields that had commas in their entries. 
 data.extraction.date <- "2026-05-11"
 
-table.names <- c("_Animal", "_Morphology", "_Age", "_Reproduction",
-                 "_Bone", "Code_Maturity")
+# 
+# table.names <- c("_Animal", "_Morphology", "_Age", "_Reproduction",
+#                  "_Bone", "Code_Maturity")
 
-species.col.types <- cols(ID = col_integer(),
-                          TaxanomicOrder = col_character(),
-                          SubOrder = col_character(),
-                          InfraOrder = col_character(),
-                          Family = col_character(),
-                          FamilyCommonName = col_character(),
-                          Genus = col_character(),
-                          Species = col_character(),
-                          Subspecies = col_character(),
-                          CommonName = col_character(),
-                          SpType = col_character(),
-                          SpName = col_character(),
-                          SpCode = col_character(),
-                          AerialFisheryCode = col_character(),
-                          BirderCode = col_character(),
-                          AlternateCode1 = col_character(),
-                          AlternateCode2 = col_character(),
-                          EditDate = col_datetime(),
-                          EditUser = col_character(),
-                          RecordCreationDate = col_datetime())
+# All column types are stored in the SWFSC_Stranding_fcns.R script
 
-morph.col.types <- cols(Specimen = col_character(),
-                        TotalLength_LAB = col_double(),
-                        IsStandardTL_LAB = col_factor(levels = c("Y", "N", "y", "n")),
-                        TotalLength_FIELD = col_double(),
-                        IsStandardTL_FIELD = col_factor(levels = c("Y", "N", "y", "n")),
-                        IsAltMeasurementDeviceUsed = col_factor(levels = c("Y", "N", "y", "n")),
-                        Spotter_Color = col_integer(),
-                        Spinner_Morph = col_integer(),
-                        Spinner_Cape = col_integer(),
-                        Spinner_Fin = col_integer(),
-                        Spinner_Belly = col_integer(),
-                        STOANUS = col_double(),
-                        STOGENSLIT = col_double(),
-                        STOUMBIL = col_double(),
-                        STOTHRGROO = col_double(),
-                        STODOFINTIP = col_double(),
-                        STOANTDOR = col_double(),
-                        STOFLIPPER = col_double(),
-                        STOEAR = col_double(),
-                        STOEYE = col_double(),
-                        STOGAPE = col_double(),
-                        STOBLOHOLE = col_double(),
-                        STOMELAPEX = col_double(),
-                        ETOEAR = col_double(),
-                        ETOGAPE = col_double(),
-                        ETOBLOHL_L = col_double(),
-                        ETOBLOHL_R = col_double(),
-                        BLOHL_LGTH = col_double(),
-                        BLOHLWDTH = col_double(),
-                        DIAM_EAR = col_character(),
-                        HEAD_DIAM = col_double(),
-                        LGTH_EOP = col_double(),
-                        ROSTWIDTH = col_double(),
-                        PROJECTUP = col_character(),
-                        PROJECTLOW = col_character(),
-                        THROATGROOVE_N = col_integer(),
-                        LGTH_GROO = col_double(),
-                        FLIPLGTH_A = col_double(),
-                        FLIPLGTH_P = col_double(),
-                        FLIPWIDTH = col_double(),
-                        LGTHMAMS_R = col_double(),
-                        LGTHMAMS_L = col_double(),
-                        MAMMSLIT_N = col_integer(),
-                        LGTHGENSLI = col_double(),
-                        LGTHANASLI = col_double(),
-                        PERILGTH = col_double(),
-                        FLUKWDTH = col_double(),
-                        FLUKDPTH_L = col_double(),
-                        FLUKDPTH_N = col_double(),
-                        FLUKNTDPTH = col_double(),
-                        DORFNHGT = col_double(),
-                        DORFNBLGTH = col_double(),
-                        GATEYE = col_double(),
-                        GAAXILLA = col_double(),
-                        GIRTHMAX = col_double(),
-                        GATANUS = col_double(),
-                        GMIDANTONT = col_double(),
-                        HGTSMPL = col_double(),
-                        THICKSMPL = col_double(),
-                        BLUBTHIK_D = col_double(),
-                        BLUBTHIK_L = col_double(),
-                        BLUBTHIK_V = col_double(),
-                        BLUBTHIK_C = col_double(),
-                        BlubberCompData = col_factor(levels = c("Y", "N", "y", "n")),
-                        Pinn_CurvilinearLength = col_double(),
-                        Pinn_FlipperLn_ForeAnt = col_double(),
-                        Pinn_FlipperLn_HindAnt = col_double(),
-                        EditDate = col_datetime(),
-                        EditUser = col_character(),
-                        RecordCreationDate = col_datetime())
+# There were some extensive editing (mostly deleting entries) for the Species
+# table. So, I'm not going to change the data file from 2026-05-12
+table.Species <- read_csv(file = paste0("Data/tblSpecies.csv"),
+                          col_types = species.col.types) %>%
+  rename(SpeciesID = SpCode) %>%
+  select(-c(EditDate, EditUser, RecordCreationDate))
 
-animal.col.types <- cols(Specimen = col_character(),
-                        OriginID = col_integer(),
-                        IsSWFSC = col_factor(levels = c("Y", "N", "y", "n")),
-                        IsDataSheet = col_factor(levels = c("Y", "N", "y", "n")),
-                        Cruise = col_character(),
-                        Cruise_Set = col_character(),
-                        Year = col_integer(),
-                        Month = col_integer(),
-                        Day = col_integer(),
-                        Latitude = col_double(),
-                        Latitude_Precision = col_double(),
-                        Latitude_Precision_Unit = col_character(),
-                        Longitude = col_double(),
-                        Longitude_Precision = col_double(),
-                        Longitude_Precision_Unit = col_character(),
-                        CityID = col_integer(),
-                        CountyID = col_integer(),
-                        StateID = col_integer(),
-                        CountryID = col_integer(),
-                        SpeciesID = col_character(),
-                        SpDeterminationID = col_character(),
-                        Sex = col_factor(levels = c("F", "M", "U", "f", "m", "u")),
-                        Adrenals_Coll = col_character(),
-                        Genetics_Biopsy_Coll = col_character(),
-                        Blood_Coll = col_character(),
-                        Blubber_Coll = col_character(),
-                        Brain_Coll = col_character(),
-                        Carcass_Coll = col_character(),
-                        Feces_Coll = col_character(),
-                        Fetus_Coll = col_character(),
-                        FetusGenetics_Coll = col_character(),
-                        Gonad_Coll = col_character(),
-                        Head_Coll = col_character(),
-                        Histo_Coll = col_character(),
-                        Kidney_Coll = col_character(),
-                        Liver_Coll = col_character(),
-                        Lung_Coll = col_character(),
-                        Morphometry_Coll = col_character(),
-                        Muscle_Coll = col_character(),
-                        Photos_Coll = col_character(),
-                        Radiology_Coll = col_character(),
-                        Skeleton_Coll = col_character(),
-                        Spleen_Coll = col_character(),
-                        Stomach_Coll = col_character(),
-                        Teeth_Coll = col_character(),
-                        Urine_Coll = col_character(),
-                        Other_Coll = col_character(),
-                        EditDate = col_datetime(),
-                        EditUser = col_character(),
-                        RecordCreationDate = col_datetime())
+table.Morph <- read_csv(file = paste0("Data/tbl_Morphology_", 
+                                      data.extraction.date, ".csv"),
+                        col_types = morph.col.types) %>%
+  select(-c(EditDate, EditUser, RecordCreationDate))
 
-age.col.types <- cols(ID = col_integer(),
-                      Specimen = col_character(),
-                      Age = col_double(),
-                      IsAnalysisQuality = col_factor(levels = c("Y", "N")),
-                      EstimationMethod = col_factor(),
-                      AgeReader1 = col_double(), 
-                      ReaderID1 = col_integer(),
-                      AgeReader2 = col_double(),
-                      ReaderID2 = col_integer(),
-                      AgeReader3 = col_double(),
-                      ReaderID3 = col_integer(),
-                      AgeReader4 = col_double(),
-                      ReaderID4 = col_integer(),
-                      EditDate = col_datetime(),
-                      EditUser = col_character(),
-                      RecordCreationDate= col_datetime())
-
-repro.col.types <- cols(Specimen = col_character(),
-                        IsSideKnown = col_factor(levels = c("Y", "N", "y", "n")),
-                        IsMature = col_factor(levels = c("Y", "N", "U", "y", "n", "u")),
-                        MaturityID = col_integer(),
-                        IsLactating = col_factor(levels = c("Y", "N", "y", "n")),
-                        IsPregnant = col_factor(levels = c("Y", "N", "y", "n")),
-                        Follicle_Diam = col_double(),
-                        OvaryWeight_R = col_double(),
-                        OvaryWeight_L = col_double(),
-                        OvaryLength_R = col_double(),
-                        OvaryWidth_R = col_double(),
-                        OvaryDepth_R = col_double(),
-                        OvaryLength_L = col_double(),
-                        OvaryWidth_L = col_double(),
-                        OvaryDepth_L = col_double(),
-                        CL_Diam1 = col_integer(),
-                        CL_Diam2 = col_integer(),
-                        CL_Diam3 = col_integer(),
-                        CL_InternalDiam1 = col_integer(),
-                        CL_InternalDiam2 = col_integer(),
-                        CA1_R = col_integer(),
-                        CA2_R = col_integer(),
-                        CA3_R = col_integer(),
-                        CA4_R = col_integer(),
-                        CA5_R = col_integer(),
-                        CA6_R = col_integer(),
-                        CA_RIGHT = col_integer(),
-                        CA1_L = col_integer(),
-                        CA2_L = col_integer(),
-                        CA3_L = col_integer(),
-                        CA4_L = col_integer(),
-                        CA5_L = col_integer(),
-                        CA6_L = col_integer(),
-                        CA_LEFT = col_integer(),
-                        TotalCorpora = col_integer(),
-                        CL_LocationID = col_integer(),
-                        FetusLength_Standard = col_double(),
-                        FetusLength_Curvilinear = col_double(),
-                        FetusSex = col_factor(levels = c("M", "F", "U", "m", "f", "u")),
-                        FetusWeight = col_double(),
-                        WeightWEpi_L = col_double(),
-                        WeightWEpi_R = col_double(),
-                        WeightWOEPI_R = col_double(),
-                        WeightWOEPI_L = col_double(),
-                        TestisLength_R = col_double(),
-                        TestisWidth_R = col_double(),
-                        TestisDepth_R = col_double(),
-                        TestisLength_L = col_double(),
-                        TestisWidth_L = col_double(),
-                        TestisDepth_L = col_double(),
-                        EditDate = col_datetime(),
-                        EditUser = col_character(),
-                        RecordCreationDate = col_datetime())
-
-weight.col.types <- cols(Specimen = col_character(),
-                         Adrenal_1 = col_double(),
-                         AdrenalSide_1 = col_character(),
-                         Adrenal_2 = col_double(),
-                         AdrenalSide_2 = col_character(),
-                         Blubber = col_double(),
-                         Brain = col_double(),
-                         Carcass_Intact = col_double(),
-                         Epaxial = col_double(),
-                         Heart = col_double(),
-                         Hypaxial = col_double(),
-                         Intestines = col_double(),
-                         Intestine_Length = col_double(),
-                         Kidney_R = col_double(),
-                         Kidney_L = col_double(),
-                         Liver = col_double(),
-                         Lung_R = col_double(),
-                         Lung_L = col_double(),
-                         Misc = col_double(),
-                         Muscle_Total = col_double(),
-                         Pancreas = col_double(),
-                         Spleen = col_double(),
-                         Stomach_Full = col_double(),
-                         Stomach_Empty = col_double(),
-                         Thymus = col_double(),
-                         Viscera = col_double(),
-                         EditDate = col_datetime(),
-                         EditUser = col_character(),
-                         RecordCreationDate = col_datetime())
-
-table.Species <- read_csv(file = paste0("Data/tblSpecies_", data.extraction.date, ".csv"),
-                          col_types = species.col.types)
-
-table.Morph <- read_csv(file = paste0("Data/tbl_Morphology_", data.extraction.date, ".csv"),
-                        col_types = morph.col.types)
-
-table.Animal <- read_csv(file = paste0("Data/tbl_Animal_", data.extraction.date, ".csv"),
-                         col_types = animal.col.types)
+table.Animal <- read_csv(file = paste0("Data/tbl_Animal_", 
+                                       data.extraction.date, ".csv"),
+                         col_types = animal.col.types) %>%
+  select(-c(EditDate, EditUser, RecordCreationDate))
 
 
-table.Age <- read_csv(file = paste0("Data/tbl_Age_", data.extraction.date, ".csv"),
-                      col_types = age.col.types)
+table.Age <- read_csv(file = paste0("Data/tbl_Age_", 
+                                    data.extraction.date, ".csv"),
+                      col_types = age.col.types) %>%
+  select(-c(EditDate, EditUser, RecordCreationDate))
 
 table.Age %>%
   filter(IsAnalysisQuality == "Y") %>%
   left_join(table.Animal, by = "Specimen") -> table.Age.1
 
-table.Repro <- read_csv(file = paste0("Data/tbl_Reproduction_", data.extraction.date, ".csv"),
-                        col_types = repro.col.types)
+table.Repro <- read_csv(file = paste0("Data/tbl_Reproduction_", 
+                                      data.extraction.date, ".csv"),
+                        col_types = repro.col.types) %>%
+  select(-c(EditDate, EditUser, RecordCreationDate))
 
-table.Weight <- read_csv(file = paste0("Data/tbl_Weight_", data.extraction.date, ".csv"),
-                        col_types = weight.col.types)
+table.Weight <- read_csv(file = paste0("Data/tbl_Weight_", 
+                                       data.extraction.date, ".csv"),
+                         col_types = weight.col.types) %>%
+  select(-c(EditDate, EditUser, RecordCreationDate))
 
 # Remove a fin whale that had very small Lab measurement
+# The filter removes if ratio = NA. Need to explicitly keep NAs. 
 table.Morph  %>%
-  left_join(table.Weight, by = "Specimen") %>%
+  select(Specimen, TotalLength_LAB, TotalLength_FIELD, IsStandardTL_FIELD,
+         IsStandardTL_LAB, GIRTHMAX) %>%
   mutate(ratio = TotalLength_FIELD/TotalLength_LAB) %>%
-  filter(ratio < 2) -> table.Morph.1
+  filter(ratio < 2 | is.na(ratio)) -> table.Morph.1
 
-table.Morph %>%
-  left_join(table.Weight, by = "Specimen") -> table.Morph.2
+Field.Lab.lm <- lm(TotalLength_LAB ~ TotalLength_FIELD, data = table.Morph.1)
 
-# table.Morph %>%
-#   filter(!is.na(TotalLength_FIELD)) %>%
-#   left_join(table.Animal, by = "Specimen")-> table.Morph.1
+table.Morph.1 %>%
+  left_join(table.Animal %>% 
+              select(Specimen, SpeciesID, Year, Latitude, Longitude),
+            by = "Specimen") %>% 
+  left_join(table.Species %>% 
+              select(SpeciesID, Genus, Species, CommonName, SpName), 
+            by = "SpeciesID") %>% 
+  filter(Genus != "Unid") %>%
+  mutate(Genus.f = as.factor(Genus)) %>% 
+  left_join(table.Weight %>%
+              select(Specimen, Carcass_Intact, Heart, Kidney_R, Kidney_L, Liver), 
+            by = "Specimen") %>%
+  left_join(table.Age.1 %>%
+              select(Specimen, Age, IsAnalysisQuality, EstimationMethod), 
+            by = "Specimen") %>%
+  left_join(table.Repro %>% 
+              select(Specimen, IsMature, MaturityID, IsLactating, IsPregnant,
+                     CA_LEFT, CA_RIGHT, TotalCorpora), 
+            by = "Specimen") -> table.Morph.2
+
+table.Morph.2 %>%
+  filter(Genus.f == "Stenella") %>%
+  mutate(Species.f = as.factor(Species))-> table.Morph.2.Stenella
+
+# ggplot(table.Morph.2.Stenella) +
+#   geom_point(aes(x = Age, y = TotalLength_FIELD, 
+#                  color = Species.f, size = Latitude),
+#              alpha = 0.5)
+
+# simple age-sexual maturity logistic regression:
+table.Morph.2.Stenella %>%
+  select(Age, IsMature, Species.f, TotalLength_FIELD) %>%
+  na.omit() %>%
+  droplevels() %>%
+  mutate(IsMature.int = as.integer(IsMature),
+         Species.int = as.integer(Species.f)) %>%
+  mutate(Mature.idx = ifelse(IsMature.int == 1, 1, 0)) -> Stenella.maturity
+
+sp.names <- paste("S.", levels(Stenella.maturity$Species.f))
+
+jags.params <- c("B", "Sigma", "rho", "mu_beta", "loglik")
+# Define an identity matrix for the Wishart scale matrix
+R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2)
+
+jags.data <- list(
+  X = Stenella.maturity$Age,          
+  mature = Stenella.maturity$Mature.idx,    
+  species_idx = Stenella.maturity$Species.int, 
+  N = nrow(Stenella.maturity),
+  n.sp = max(Stenella.maturity$Species.int),
+  R = R_matrix
+)
+
+jags.model <- "models/model_logistic_regression.jags"
+
+jm.Stenella.age <- jagsUI::jags(jags.data,
+                                inits = NULL,
+                                parameters.to.save= jags.params,
+                                model.file = jags.model,
+                                n.chains = MCMC.params$n.chains,
+                                n.burnin = MCMC.params$n.burnin,
+                                n.thin = MCMC.params$n.thin,
+                                n.iter = MCMC.params$n.samples,
+                                DIC = T,
+                                parallel=T)
+
+Rhat.Stenella.age <- rank.normalized.R.hat(jm.Stenella.age$samples,
+                                       params = "^mu_beta|^B|^Sigma|^rho",
+                                       MCMC.params = MCMC.params)
+
+jm.logistic.summary.age <- summary.logistic(jags.out = jm.Stenella.age,
+                                            jags.data = jags.data, 
+                                            xvar = "Age",
+                                            sp.names = sp.names)
+
+# Do a similar analysis with length:
+jags.data <- list(X = Stenella.maturity$TotalLength_FIELD,          
+                  mature = Stenella.maturity$Mature.idx,    
+                  species_idx = Stenella.maturity$Species.int, 
+                  N = nrow(Stenella.maturity),
+                  n.sp = max(Stenella.maturity$Species.int),
+                  R = R_matrix)
+
+jags.model <- "models/model_logistic_regression.jags"
+
+jm.Stenella.length <- jagsUI::jags(jags.data,
+                                   inits = NULL,
+                                   parameters.to.save= jags.params,
+                                   model.file = jags.model,
+                                   n.chains = MCMC.params$n.chains,
+                                   n.burnin = MCMC.params$n.burnin,
+                                   n.thin = MCMC.params$n.thin,
+                                   n.iter = MCMC.params$n.samples,
+                                   DIC = T,
+                                   parallel=T)
+
+Rhat.Stenella.length <- rank.normalized.R.hat(jm.Stenella.length$samples,
+                                              params = "^mu_beta|^B|^Sigma|^rho",
+                                              MCMC.params = MCMC.params)
+
+jm.logistic.summary.length <- summary.logistic(jags.out = jm.Stenella.length,
+                                               jags.data = jags.data, 
+                                               xvar = "Length",
+                                               sp.names = sp.names)
 
 
+table.Morph.2 %>%
+  filter(Genus.f == "Delphinus") %>%
+  mutate(Species.f = as.factor(Species))-> table.Morph.2.Delphinus
+
+# ggplot(table.Morph.2.Delphinus) +
+#   geom_point(aes(x = Age, y = TotalLength_FIELD, 
+#                  color = Species.f, size = Latitude),
+#              alpha = 0.5)
+
+table.Morph.2 %>%
+  filter(Genus.f == "Tursiops") %>%
+  mutate(Species.f = as.factor(Species))-> table.Morph.2.Tursiops
+
+# ggplot(table.Morph.2.Tursiops) +
+#   geom_point(aes(x = Age, y = TotalLength_FIELD, 
+#                  color = Latitude))
