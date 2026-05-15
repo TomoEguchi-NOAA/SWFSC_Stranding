@@ -62,7 +62,7 @@ MMLH.tables %>%
 # looking at data. "_InvTeeth", "_InvGonad", "_InvOsteology"
 
 table.names <- c("_Animal", "_Morphology", "_Age", "_Reproduction",
-                  "_Bone", "_Weight", "Code_Maturity")
+                  "_Bone", "_Weight", "Code_Maturity", "_MaleHistology")
 
 table.list <- list()
 
