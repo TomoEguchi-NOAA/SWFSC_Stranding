@@ -5,13 +5,97 @@ library(tidyverse)
 library(readr)
 
 connection.string <- function(database){
-  return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-s;Database=",
-                database, ";Trusted_Connection=yes;TrustServerCertificate=yes;"))
+  # return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-s;Database=",
+  #               database, ";Trusted_Connection=yes;TrustServerCertificate=yes;"))
   
   # return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-ut.nmfs.local;Database=",
   #               database, ";Trusted_Connection=yes;Port=1433;TrustServerCertificate=yes;"))
+  
+  return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-g.nmfs.local;Database=",
+                database, ";Trusted_Connection=yes;Port=1433;TrustServerCertificate=yes;"))
 
-  }
+}
+
+# read tables that were extracted by sQL_data_extraction.R
+read.tables <- function(data.extraction.date){
+  # All column types are stored below
+  # There were some extensive editing (mostly deleting entries) for the Species
+  # table. So, I'm not going to change the data file from 2026-05-12
+  table.Species <- read_csv(file = paste0("Data/tblSpecies.csv"),
+                            col_types = species.col.types) %>%
+    rename(SpeciesID = SpCode) %>%
+    select(-c(EditDate, EditUser, RecordCreationDate))
+  
+  table.Morph <- read_csv(file = paste0("Data/tbl_Morphology_", 
+                                        data.extraction.date, ".csv"),
+                          col_types = morph.col.types) %>%
+    select(-c(EditDate, EditUser, RecordCreationDate))
+  
+  table.Animal <- read_csv(file = paste0("Data/tbl_Animal_", 
+                                         data.extraction.date, ".csv"),
+                           col_types = animal.col.types) %>%
+    select(-c(EditDate, EditUser, RecordCreationDate))
+  
+  table.Age <- read_csv(file = paste0("Data/tbl_Age_", 
+                                      data.extraction.date, ".csv"),
+                        col_types = age.col.types) %>%
+    select(-c(EditDate, EditUser, RecordCreationDate))
+  
+  table.Age %>%
+    filter(IsAnalysisQuality == "Y") %>%
+    left_join(table.Animal, by = "Specimen") -> table.Age.1
+  
+  table.Repro <- read_csv(file = paste0("Data/tbl_Reproduction_", 
+                                        data.extraction.date, ".csv"),
+                          col_types = repro.col.types) %>%
+    select(-c(EditDate, EditUser, RecordCreationDate))
+  
+  table.Weight <- read_csv(file = paste0("Data/tbl_Weight_", 
+                                         data.extraction.date, ".csv"),
+                           col_types = weight.col.types) %>%
+    select(-c(EditDate, EditUser, RecordCreationDate))
+  
+  # Remove a fin whale that had very small Lab measurement
+  # The filter removes if ratio = NA. Need to explicitly keep NAs. 
+  table.Morph  %>%
+    select(Specimen, TotalLength_LAB, TotalLength_FIELD, IsStandardTL_FIELD,
+           IsStandardTL_LAB, GIRTHMAX) %>%
+    mutate(ratio = TotalLength_FIELD/TotalLength_LAB) %>%
+    filter(ratio < 2 | is.na(ratio)) -> table.Morph.1
+  
+  Field.Lab.lm <- lm(TotalLength_LAB ~ TotalLength_FIELD, data = table.Morph.1)
+  
+  table.Morph.1 %>%
+    left_join(table.Animal %>% 
+                select(Specimen, SpeciesID, Year, Latitude, Longitude),
+              by = "Specimen") %>% 
+    left_join(table.Species %>% 
+                select(SpeciesID, Genus, Species, CommonName, SpName), 
+              by = "SpeciesID") %>% 
+    filter(Genus != "Unid") %>%
+    mutate(Genus.f = as.factor(Genus)) %>% 
+    left_join(table.Weight %>%
+                select(Specimen, Carcass_Intact, Heart, Kidney_R, Kidney_L, Liver), 
+              by = "Specimen") %>%
+    left_join(table.Age.1 %>%
+                select(Specimen, Age, IsAnalysisQuality, EstimationMethod), 
+              by = "Specimen") %>%
+    left_join(table.Repro %>% 
+                select(Specimen, IsMature, MaturityID, IsLactating, IsPregnant,
+                       CA_LEFT, CA_RIGHT, TotalCorpora, FetusLength_Standard,
+                       FetusWeight), 
+              by = "Specimen") -> table.Morph.2  
+
+  return(list(Morph.2 = table.Morph.2,
+              Morph.1 = table.Morph.1,
+              Morph = table.Morph,
+              Weight = table.Weight,
+              Repro = table.Repro,
+              Age.1 = table.Age.1,
+              Age = table.Age,
+              Animal = table.Animal,
+              Species = table.Species))  
+}
 
 compute.LOOIC <- function(loglik.array, MCMC.params){
   n.per.chain <- (MCMC.params$n.samples - MCMC.params$n.burnin)/MCMC.params$n.thin
@@ -76,6 +160,7 @@ rank.normalized.R.hat <- function(samples, params, MCMC.params){
 summary.logistic <- function(jags.out,
                              jags.data,
                              xvar = "Age",
+                             yvar = "Probability of Maturity",
                              sp.names){
   # 1. Extract the posterior means for the B matrix
   # Assuming 'samples' is your mcmc.list object
@@ -166,7 +251,7 @@ summary.logistic <- function(jags.out,
     # 95% Credible Interval Ribbon
     geom_ribbon(aes(ymin = low, ymax = high, fill = species), alpha = 0.2) +
     # Median Line
-    geom_line(aes(y = median_prob, color = species), size = 1) +
+    geom_line(aes(y = median_prob, color = species), linewidth = 1) +
     # Horizontal line at 50% probability
     # 3. Add Segments (Vertical then Horizontal)
     geom_segment(data = a50_summary, 
@@ -187,7 +272,7 @@ summary.logistic <- function(jags.out,
     labs(title = "Maturity Curves with 95% Credible Intervals",
          subtitle = "Shaded areas represent posterior uncertainty",
          x = xvar,
-         y = "Probability of Maturity") +
+         y = yvar) +
     theme_bw() +
     theme(legend.position = "none")
   

@@ -13,7 +13,7 @@ library(posterior)
 library(bayesplot)
 
 source("SWFSC_Stranding_fcns.R")
-options(mc.cores = 10)
+options(mc.cores = parallel::detectCores())
 
 MCMC.params <- list(n.samples = 25000,
                    n.thin = 100,
@@ -107,94 +107,135 @@ table.Morph.2 %>%
 #                  color = Species.f, size = Latitude),
 #              alpha = 0.5)
 
-# simple age-sexual maturity logistic regression:
-table.Morph.2.Stenella %>%
-  select(Age, IsMature, Species.f, TotalLength_FIELD) %>%
-  na.omit() %>%
-  droplevels() %>%
-  mutate(IsMature.int = as.integer(IsMature),
-         Species.int = as.integer(Species.f)) %>%
-  mutate(Mature.idx = ifelse(IsMature.int == 1, 1, 0)) -> Stenella.maturity
+jags.out.filename.age <- "RData/jags_out_Stenella_age_logistic.rds"
 
-sp.names <- paste("S.", levels(Stenella.maturity$Species.f))
+if (!file.exists(jags.out.filename.age)){
+  
+  # simple age-sexual maturity logistic regression:
+  table.Morph.2.Stenella %>%
+    select(Age, IsMature, Species.f, TotalLength_FIELD) %>%
+    na.omit() %>%
+    droplevels() %>%
+    mutate(IsMature.int = as.integer(IsMature),
+           Species.int = as.integer(Species.f)) %>%
+    mutate(Mature.idx = ifelse(IsMature.int == 1, 1, 0)) -> Stenella.maturity
+  
+  sp.names <- paste("S.", levels(Stenella.maturity$Species.f))
+  
+  jags.params <- c("B", "Sigma", "rho", "mu_beta", "loglik")
+  # Define an identity matrix for the Wishart scale matrix
+  R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2)
+  
+  jags.data <- list(
+    X = Stenella.maturity$Age,          
+    mature = Stenella.maturity$Mature.idx,    
+    species_idx = Stenella.maturity$Species.int, 
+    N = nrow(Stenella.maturity),
+    n.sp = max(Stenella.maturity$Species.int),
+    R = R_matrix
+  )
+  
+  jags.model <- "models/model_logistic_regression.jags"
+  
+  tic <- Sys.time()
+  jm.Stenella.age <- jagsUI::jags(jags.data,
+                                  inits = NULL,
+                                  parameters.to.save= jags.params,
+                                  model.file = jags.model,
+                                  n.chains = MCMC.params$n.chains,
+                                  n.burnin = MCMC.params$n.burnin,
+                                  n.thin = MCMC.params$n.thin,
+                                  n.iter = MCMC.params$n.samples,
+                                  DIC = T,
+                                  parallel=T)
+  
+  toc <- Sys.time()
+  Rhat.Stenella.age <- rank.normalized.R.hat(jm.Stenella.age$samples,
+                                             params = "^mu_beta|^B|^Sigma|^rho",
+                                             MCMC.params = MCMC.params)
+  
+  jm.logistic.summary.age <- summary.logistic(jags.out = jm.Stenella.age,
+                                              jags.data = jags.data, 
+                                              xvar = "Age",
+                                              sp.names = sp.names)
 
-jags.params <- c("B", "Sigma", "rho", "mu_beta", "loglik")
-# Define an identity matrix for the Wishart scale matrix
-R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2)
+  jags.out.age <- list(jags.model = jags.model,
+                       jags.data = jags.data,
+                       MCMC.params = MCMC.params,
+                       jags.out = jm.Stenella.age,
+                       Rhat = Rhat.Stenella.age,
+                       logistic.summary = jm.logistic.summary.age,
+                       Run.Date = Sys.Date(),
+                       Run.Time = toc - tic,
+                       System = Sys.getenv())
+  
+  saveRDS(jags.out.age, 
+          file = jags.out.filename.age)
+} else {
+  jags.out.age <- read_rds(jags.out.filename.age)
+} 
 
-jags.data <- list(
-  X = Stenella.maturity$Age,          
-  mature = Stenella.maturity$Mature.idx,    
-  species_idx = Stenella.maturity$Species.int, 
-  N = nrow(Stenella.maturity),
-  n.sp = max(Stenella.maturity$Species.int),
-  R = R_matrix
-)
+jags.out.filename.length <- "RData/jags_out_Stenella_length_logistic.rds"
 
-jags.model <- "models/model_logistic_regression.jags"
-
-jm.Stenella.age <- jagsUI::jags(jags.data,
-                                inits = NULL,
-                                parameters.to.save= jags.params,
-                                model.file = jags.model,
-                                n.chains = MCMC.params$n.chains,
-                                n.burnin = MCMC.params$n.burnin,
-                                n.thin = MCMC.params$n.thin,
-                                n.iter = MCMC.params$n.samples,
-                                DIC = T,
-                                parallel=T)
-
-Rhat.Stenella.age <- rank.normalized.R.hat(jm.Stenella.age$samples,
-                                       params = "^mu_beta|^B|^Sigma|^rho",
-                                       MCMC.params = MCMC.params)
-
-jm.logistic.summary.age <- summary.logistic(jags.out = jm.Stenella.age,
-                                            jags.data = jags.data, 
-                                            xvar = "Age",
-                                            sp.names = sp.names)
-
-# Do a similar analysis with length:
-jags.data <- list(X = Stenella.maturity$TotalLength_FIELD,          
-                  mature = Stenella.maturity$Mature.idx,    
-                  species_idx = Stenella.maturity$Species.int, 
-                  N = nrow(Stenella.maturity),
-                  n.sp = max(Stenella.maturity$Species.int),
-                  R = R_matrix)
-
-jags.model <- "models/model_logistic_regression.jags"
-
-jm.Stenella.length <- jagsUI::jags(jags.data,
-                                   inits = NULL,
-                                   parameters.to.save= jags.params,
-                                   model.file = jags.model,
-                                   n.chains = MCMC.params$n.chains,
-                                   n.burnin = MCMC.params$n.burnin,
-                                   n.thin = MCMC.params$n.thin,
-                                   n.iter = MCMC.params$n.samples,
-                                   DIC = T,
-                                   parallel=T)
-
-Rhat.Stenella.length <- rank.normalized.R.hat(jm.Stenella.length$samples,
-                                              params = "^mu_beta|^B|^Sigma|^rho",
-                                              MCMC.params = MCMC.params)
-
-jm.logistic.summary.length <- summary.logistic(jags.out = jm.Stenella.length,
-                                               jags.data = jags.data, 
-                                               xvar = "Length",
-                                               sp.names = sp.names)
-
+if (!file.exists(jags.out.filename.length)){
+  
+  # Do a similar analysis with length:
+  jags.data <- list(X = Stenella.maturity$TotalLength_FIELD,          
+                    mature = Stenella.maturity$Mature.idx,    
+                    species_idx = Stenella.maturity$Species.int, 
+                    N = nrow(Stenella.maturity),
+                    n.sp = max(Stenella.maturity$Species.int),
+                    R = R_matrix)
+  
+  jags.model <- "models/model_logistic_regression.jags"
+  
+  jm.Stenella.length <- jagsUI::jags(jags.data,
+                                     inits = NULL,
+                                     parameters.to.save= jags.params,
+                                     model.file = jags.model,
+                                     n.chains = MCMC.params$n.chains,
+                                     n.burnin = MCMC.params$n.burnin,
+                                     n.thin = MCMC.params$n.thin,
+                                     n.iter = MCMC.params$n.samples,
+                                     DIC = T,
+                                     parallel=T)
+  
+  Rhat.Stenella.length <- rank.normalized.R.hat(jm.Stenella.length$samples,
+                                                params = "^mu_beta|^B|^Sigma|^rho",
+                                                MCMC.params = MCMC.params)
+  
+  jm.logistic.summary.length <- summary.logistic(jags.out = jm.Stenella.length,
+                                                 jags.data = jags.data, 
+                                                 xvar = "Length",
+                                                 sp.names = sp.names)
+  
+  jags.out.length <- list(jags.model = jags.model,
+                          jags.data = jags.data,
+                          MCMC.params = MCMC.params,
+                          jags.out = jm.Stenella.length,
+                          Rhat = Rhat.Stenella.length,
+                          logistic.summary = jm.logistic.summary.length,
+                          Run.Date = Sys.Date(),
+                          Run.Time = toc - tic,
+                          System = Sys.getenv())
+  
+  saveRDS(jags.out.length, 
+          file = jags.out.filename.length)
+} else {
+  jags.out.length <- read_rds(jags.out.filename.length)
+} 
 
 table.Morph.2 %>%
-  filter(Genus.f == "Delphinus") %>%
-  mutate(Species.f = as.factor(Species))-> table.Morph.2.Delphinus
-
-# ggplot(table.Morph.2.Delphinus) +
-#   geom_point(aes(x = Age, y = TotalLength_FIELD, 
-#                  color = Species.f, size = Latitude),
-#              alpha = 0.5)
-
-table.Morph.2 %>%
-  filter(Genus.f == "Tursiops") %>%
+    filter(Genus.f == "Delphinus") %>%
+    mutate(Species.f = as.factor(Species))-> table.Morph.2.Delphinus
+  
+  # ggplot(table.Morph.2.Delphinus) +
+  #   geom_point(aes(x = Age, y = TotalLength_FIELD, 
+  #                  color = Species.f, size = Latitude),
+  #              alpha = 0.5)
+  
+  table.Morph.2 %>%
+    filter(Genus.f == "Tursiops") %>%
   mutate(Species.f = as.factor(Species))-> table.Morph.2.Tursiops
 
 # ggplot(table.Morph.2.Tursiops) +

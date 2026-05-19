@@ -47,7 +47,6 @@ write.csv(tbl.Species,
 
 odbcClose(Common)
 
-
 # Get the lifehistory database
 MMLH.con <- connection.string("MMLH") 
 MMLH.2019 <- odbcDriverConnect(MMLH.con)
@@ -78,26 +77,26 @@ for (k in 1:length(table.names)){
     select.col <- table.list[[k]] %>% dplyr::select(-c(Comments, rv))
   }
     
-  write.csv(select.col,
-            file = paste0("Data/", table.name, "_", Sys.Date(), ".csv"),
-            quote = FALSE,
-            row.names = FALSE)
+  # write.csv(select.col,
+  #           file = paste0("Data/", table.name, "_", Sys.Date(), ".csv"),
+  #           quote = FALSE,
+  #           row.names = FALSE)
   
 }
 
 names(table.list) <- table.names
 
 # The following will not work - need to pull out by names 2026-05-11
-table.list[[grep("Animal", table.names)]] %>%
-  select(Specimen, Year, Month, Day, Latitude, Latitude_Precision,
-         Latitude_Precision_Unit, Longitude, Longitude_Precision,
-         Longitude_Precision_Unit, SpeciesID, Sex) %>%
-  left_join(tbl.Species, by = "SpeciesID")-> tbl.Animal
-
-# Select Delphinus and Tursiops
-tbl.Animal %>%
-  filter(Genus == "Delphinus" |
-         Genus == "Tursiops") -> tbl.Animal.dolphins
+# table.list[[grep("Animal", table.names)]] %>%
+#   select(Specimen, Year, Month, Day, Latitude, Latitude_Precision,
+#          Latitude_Precision_Unit, Longitude, Longitude_Precision,
+#          Longitude_Precision_Unit, SpeciesID, Sex) %>%
+#   left_join(tbl.Species, by = "SpeciesID")-> tbl.Animal
+# 
+# # Select Delphinus and Tursiops
+# tbl.Animal %>%
+#   filter(Genus == "Delphinus" |
+#          Genus == "Tursiops") -> tbl.Animal.dolphins
 
 table.list[[grep("Morphology", table.names)]] %>%
   select(Specimen, IsStandardTL_LAB, TotalLength_LAB, 
@@ -106,20 +105,20 @@ table.list[[grep("Morphology", table.names)]] %>%
          STOANTDOR, STOFLIPPER, STOEAR, STOEYE, STOGAPE,
          STOBLOHOLE, STOMELAPEX, GIRTHMAX) -> tbl.Morphology
 
-tbl.Animal.dolphins %>%
-  left_join(tbl.Morphology, by = "Specimen") -> tbl.dolphins.morphology
-
-table.list[[grep("Age", table.names)]] %>%
-  select(-c(Comments, EditDate, EditUser, RecordCreationDate)) -> tbl.Age
-
-tbl.dolphins.morphology %>%
-  left_join(tbl.Age, by = "Specimen") -> tbl.dolphins.morphology.age
-
-tbl.dolphins.morphology.age %>%
-  filter(IsStandardTL_LAB == "Y" | IsStandardTL_FIELD == "Y") -> tbl.dolphins.StandardTL
-
-tbl.dolphins.morphology.age %>%
-  filter(IsStandardTL_LAB == "N" | IsStandardTL_FIELD == "N") -> tbl.dolphins.NoStandardTL
+# tbl.Animal.dolphins %>%
+#   left_join(tbl.Morphology, by = "Specimen") -> tbl.dolphins.morphology
+# 
+# table.list[[grep("Age", table.names)]] %>%
+#   select(-c(Comments, EditDate, EditUser, RecordCreationDate)) -> tbl.Age
+# 
+# tbl.dolphins.morphology %>%
+#   left_join(tbl.Age, by = "Specimen") -> tbl.dolphins.morphology.age
+# 
+# tbl.dolphins.morphology.age %>%
+#   filter(IsStandardTL_LAB == "Y" | IsStandardTL_FIELD == "Y") -> tbl.dolphins.StandardTL
+# 
+# tbl.dolphins.morphology.age %>%
+#   filter(IsStandardTL_LAB == "N" | IsStandardTL_FIELD == "N") -> tbl.dolphins.NoStandardTL
 
 # Create a linear model to predict the STL from other measurements:
 # Doesn't work because so many missing data... 
