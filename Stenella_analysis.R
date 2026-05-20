@@ -54,17 +54,20 @@ sp.names <- paste("S.", levels(Stenella.maturity$Species.f))
 
 ## The average age at sexual maturity (A50)
 jags.data.age <- list(X = Stenella.maturity$Age,          
-                         y = Stenella.maturity$Mature.idx,    
-                         species_idx = Stenella.maturity$Species.int, 
-                         N = nrow(Stenella.maturity),
-                         n.sp = max(Stenella.maturity$Species.int),
-                         R = R_matrix)
+                      y = Stenella.maturity$Mature.idx,    
+                      species_idx = Stenella.maturity$Species.int, 
+                      N = nrow(Stenella.maturity),
+                      n.sp = max(Stenella.maturity$Species.int))
+
+n_chains <- MCMC.params.1$n.chains
+inits.age <- lapply(1:n_chains, function(i) generate_inits_logistic(start_p50 = 10))
 
 jags.out.age <- jags.logistic(jags.data = jags.data.age,
                               MCMC.params = MCMC.params.1,
                               out.filename = "RData/jags_out_Stenella_age_logistic.rds",
                               jags.model = "models/model_logistic_regression.jags",
-                              jags.params = c("B", "Sigma", "rho", "mu_beta", "loglik"),
+                              jags.params = c("L0", "slope", "mu_L0", "mu_slope", "tau_L0", "tau_slope"),
+                              inits = inits.age,
                               xvar = "Age",
                               yvar = "Probability of maturity",
                               sp.names)
@@ -76,14 +79,30 @@ jags.data.length <- list(X = Stenella.maturity$TotalLength_FIELD,
                          y = Stenella.maturity$Mature.idx,    
                          species_idx = Stenella.maturity$Species.int, 
                          N = nrow(Stenella.maturity),
-                         n.sp = max(Stenella.maturity$Species.int),
-                         R = R_matrix)
+                         n.sp = max(Stenella.maturity$Species.int))
+
+# 1. Update the function to accept a starting guess for the 50% mark
+generate_inits_logistic <- function(start_p50) {
+  list(
+    # Center the random guesses around whatever start_p50 you provide
+    mu_L0 = runif(1, min = start_p50 - 10, max = start_p50 + 10),
+    L0 = runif(3, min = start_p50 - 10, max = start_p50 + 10),
+    
+    # Keep the slope small and positive
+    mu_slope = runif(1, min = 0.01, max = 0.1),
+    slope = runif(3, min = 0.01, max = 0.1)
+  )
+}
+
+n_chains <- MCMC.params.1$n.chains
+inits.length <- lapply(1:n_chains, function(i) generate_inits_logistic(start_p50 = 188))
 
 jags.out.length <- jags.logistic(jags.data = jags.data.length,
                                  MCMC.params = MCMC.params.1,
                                  out.filename = "RData/jags_out_Stenella_length_logistic.rds",
                                  jags.model = "models/model_logistic_regression.jags",
-                                 jags.params = c("B", "Sigma", "rho", "mu_beta", "loglik"),
+                                 jags.params = c("L0", "slope", "mu_L0", "mu_slope", "tau_L0", "tau_slope"),
+                                 inits = inits.length,
                                  xvar = "Length",
                                  yvar = "Probability of maturity",
                                  sp.names)
@@ -139,14 +158,17 @@ jags.data.LAB <- list(X = Length.at.Birth.data$Length,
                       y = Length.at.Birth.data$Status,    
                       species_idx = Length.at.Birth.data$Species.int, 
                       N = nrow(Length.at.Birth.data),
-                      n.sp = max(Length.at.Birth.data$Species.int),
-                      R = R_matrix)
+                      n.sp = max(Length.at.Birth.data$Species.int))
+
+n_chains <- MCMC.params.2$n.chains
+inits.birth <- lapply(1:n_chains, function(i) generate_inits_logistic(start_p50 = 82.5))
 
 jags.out.LAB <- jags.logistic(jags.data = jags.data.LAB,
                               MCMC.params = MCMC.params.2,
                               out.filename = "RData/jags_out_Stenella_LAB_logistic.rds",
                               jags.model = "models/model_logistic_regression.jags",
-                              jags.params = c("B", "Sigma", "rho", "mu_beta", "loglik"),
+                              jags.params = c("L0", "slope", "mu_L0", "mu_slope", "tau_L0", "tau_slope"),
+                              inits = inits.birth,
                               xvar = "Length at Birth",
                               yvar = "Proportion Postnatal",
                               sp.names)
@@ -196,7 +218,7 @@ jags.out.Laird <- jags.Laird.growth(LAB.data = Length.at.Birth.data,
                                     length.age.data = Length.at.Age.data,
                                     MCMC.params = MCMC.params.2,
                                     out.filename = "RData/jags_out_Stenella_Laird.rds",
-                                    jags.model = "models/model_two_phase_Laird_Growth.jags",
+                                    jags.model = "models/model_two_phase_Laird_L0_Growth.jags",
                                     jags.params = c("L0", "B1", "a1", "alpha1", "a2", 
                                                     "alpha2", "tc", "sigma", "loglik"),
                                     inits.fcn = generate_inits_1sex)
@@ -240,69 +262,41 @@ jags.out.Laird.sex <- jags.Laird.growth(LAB.data = Length.at.Birth.data,
                                         length.age.data = Length.at.Age.data,
                                         MCMC.params = MCMC.params.2,
                                         out.filename = "RData/jags_out_Stenella_Laird_sex.rds",
-                                        jags.model = "models/model_two_phase_Laird_Growth_sex.jags",
+                                        jags.model = "models/model_two_phase_Laird_L0_Growth_sex.jags",
                                         jags.params = c("B1", "L0", "s_a1", "s_a2", "s_alpha1", "s_alpha2",
                                                         "s_tc", "a1", "alpha1", "a2", "alpha2", "tc", "loglik"),
                                         inits.fcn = generate_inits_sex)
 
+# Just growth, without estimating L0 at the same time
+post_matrix <- as.matrix(jags.out.LAB$jags.out$samples)
 
-# Plot estimates:
+# 1. Calculate the mean L0 for each species
+mu_L0_est <- c(
+  mean(post_matrix[, "L0[1]"]),
+  mean(post_matrix[, "L0[2]"]),
+  mean(post_matrix[, "L0[3]"])
+)
 
-# 1. Extract the MCMC samples into a usable matrix
-# Assuming your coda.samples output is named 'mcmc_samples'
-post_samples <- as.matrix(jags.out.age.length$jags.out$samples)
+# 2. Calculate the standard deviation, then convert to precision (tau = 1 / variance)
+sd_L0_est <- c(
+  sd(post_matrix[, "L0[1]"]),
+  sd(post_matrix[, "L0[2]"]),
+  sd(post_matrix[, "L0[3]"])
+)
+tau_L0_est <- 1 / (sd_L0_est^2)
 
-# 2. Create a smooth sequence of ages for the x-axis
-age_seq <- seq(0, max(growth_data$age, na.rm = TRUE), length.out = 100)
+jags_data_growth <- list(
+  N_growth = nrow(Length.at.Age.data),
+  age_growth = Length.at.Age.data$Age,
+  length_growth = Length.at.Age.data$Length,
+  sp_growth = Length.at.Age.data$species_idx,
+  N_species = 3,
+  
+  # Injecting our posterior summaries as fixed data
+  mu_L0_data = mu_L0_est, 
+  tau_L0_data = tau_L0_est
+)
 
-# 3. Create an empty dataframe to store our plotting data
-plot_data <- data.frame()
-
-# 4. Loop through 3 species and 2 sexes
-for (s in 1:3) {
-  for (x in 1:2) {
-    
-    # Extract shared Phase 1 and changepoint parameters for species 's'
-    L0_samp     <- post_samples[, paste0("L0[", s, "]")]
-    a1_samp     <- post_samples[, paste0("a1[", s, "]")]
-    alpha1_samp <- post_samples[, paste0("alpha1[", s, "]")]
-    tc_samp     <- post_samples[, paste0("tc[", s, "]")]
-    
-    # Extract sex-specific Phase 2 parameters for species 's' and sex 'x'
-    # The extraction string looks like "a2[1,1]", "a2[1,2]", etc.
-    a2_samp     <- post_samples[, paste0("a2[", s, ",", x, "]")]
-    alpha2_samp <- post_samples[, paste0("alpha2[", s, ",", x, "]")]
-    
-    # Matrix to hold predictions (Rows = MCMC iterations, Columns = age points)
-    pred_matrix <- matrix(NA, nrow = nrow(post_samples), ncol = length(age_seq))
-    
-    for (i in 1:length(age_seq)) {
-      current_age <- age_seq[i]
-      
-      # Phase 1 calculation
-      mu1 <- L0_samp * exp((a1_samp / alpha1_samp) * (1 - exp(-alpha1_samp * current_age)))
-      
-      # Phase 2 calculation
-      Lc <- L0_samp * exp((a1_samp / alpha1_samp) * (1 - exp(-alpha1_samp * tc_samp)))
-      mu2 <- Lc * exp((a2_samp / alpha2_samp) * (1 - exp(-alpha2_samp * (current_age - tc_samp))))
-      
-      # Determine phase
-      pred_matrix[, i] <- ifelse(current_age < tc_samp, mu1, mu2)
-    }
-    
-    # 5. Calculate median and 95% credible intervals
-    species_sex_df <- data.frame(
-      species = s,
-      sex = x,
-      age = age_seq,
-      fit = apply(pred_matrix, 2, quantile, probs = 0.500),
-      lwr = apply(pred_matrix, 2, quantile, probs = 0.025),
-      upr = apply(pred_matrix, 2, quantile, probs = 0.975)
-    )
-    
-    plot_data <- rbind(plot_data, species_sex_df)
-  }
-}
 
 # 6. Format the labels for ggplot2
 # Predicted curve labels
