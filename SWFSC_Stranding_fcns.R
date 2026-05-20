@@ -4,6 +4,138 @@
 library(tidyverse)
 library(readr)
 
+jags.logistic <- function(jags.data,
+                          MCMC.params,
+                          out.filename,
+                          jags.model,
+                          jags.params,
+                          xvar,
+                          yvar,
+                          sp.names){
+  if (!file.exists(out.filename)){
+    
+    tic <- Sys.time()
+    jm. <- jagsUI::jags(jags.data,
+                        inits = NULL,
+                        parameters.to.save= jags.params,
+                        model.file = jags.model,
+                        n.chains = MCMC.params$n.chains,
+                        n.burnin = MCMC.params$n.burnin,
+                        n.thin = MCMC.params$n.thin,
+                        n.iter = MCMC.params$n.samples,
+                        DIC = T,
+                        parallel=T)
+    
+    toc <- Sys.time()
+    Rhat. <- rank.normalized.R.hat(jm.$samples,
+                                   params = "^mu_beta|^B|^Sigma|^rho",
+                                   MCMC.params = MCMC.params)
+    
+    post <- posterior::as_draws(jm.$samples)
+    summary.posterior <- posterior::summarise_draws(post)
+    
+    jm.summary <- summary.logistic(jags.out = jm.,
+                                   jags.data = jags.data, 
+                                   xvar = xvar,
+                                   yvar = yvar,
+                                   sp.names = sp.names)
+    
+    jags.out <- list(jags.model = jags.model,
+                     jags.data = jags.data,
+                     MCMC.params = MCMC.params,
+                     jags.out = jm.,
+                     Rhat = Rhat.,
+                     posterior.summary = summary.posterior,
+                     logistic.summary = jm.summary,
+                     Run.Date = Sys.Date(),
+                     Run.Time = toc - tic,
+                     System = Sys.getenv())
+    
+    saveRDS(jags.out, 
+            file = out.filename)
+  } else {
+    jags.out <- read_rds(out.filename)
+  } 
+  return(jags.out)
+}
+  
+
+
+
+jags.Laird.growth <- function(LAB.data,
+                              length.age.data,
+                              MCMC.params,
+                              out.filename,
+                              jags.model,
+                              jags.params,
+                              inits.fcn){
+  
+  if (!file.exists(out.filename)){
+    
+    # Define an identity matrix for the Wishart scale matrix
+    #R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2)
+    
+    jags.data <- list(
+      # Logistic Regression Data -
+      N_post = nrow(LAB.data),
+      is_postnatal = LAB.data$Status,       # Must be 0 (prenatal) or 1 (postnatal)
+      length_post = LAB.data$Length,
+      sp_post = LAB.data$Species.int,
+      
+      # Growth Curve Data
+      N_growth = nrow(length.age.data),
+      age_growth = length.age.data$Age,
+      length_growth = length.age.data$TotalLength_FIELD,
+      sp_growth = length.age.data$species_idx,
+      sex_growth = length.age.data$Sex_idx,
+      
+      # Shared Constants
+      N_species = max(length.age.data$species_idx),
+      N_sexes = 2
+    )
+    
+    tic <- Sys.time()
+    jm. <- jagsUI::jags(jags.data,
+                        inits = lapply(1:MCMC.params$n.chains, 
+                                       function(i) inits.fcn()),
+                        parameters.to.save= jags.params,
+                        model.file = jags.model,
+                        n.chains = MCMC.params$n.chains,
+                        n.burnin = MCMC.params$n.burnin,
+                        n.thin = MCMC.params$n.thin,
+                        n.iter = MCMC.params$n.samples,
+                        DIC = T,
+                        parallel=T)
+    toc <- Sys.time()
+    
+    Rhat. <- rank.normalized.R.hat(jm.$samples,
+                                   params = "^B1|^L0|^a|^tc|^s",
+                                   MCMC.params = MCMC.params)
+    
+    post <- posterior::as_draws(jm.$samples)
+    summary.posterior <- posterior::summarise_draws(post)
+    
+    jags.out. <- list(jags.model = jags.model,
+                      jags.data = jags.data,
+                      MCMC.params = MCMC.params,
+                      jags.out = jm.,
+                      Rhat = Rhat.Stenella.age.length,
+                      posterior.summary = summary.posterior,
+                      Run.Date = Sys.Date(),
+                      Run.Time = toc - tic,
+                      System = Sys.getenv())
+    
+    saveRDS(jags.out.age.length, 
+            file = jags.out.filename.age.length.sex)
+  } else {
+    jags.out. <- read_rds(jags.out.filename.age.length)
+  }   
+  
+  return(jags.out)
+}
+
+
+
 connection.string <- function(database){
   # return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-s;Database=",
   #               database, ";Trusted_Connection=yes;TrustServerCertificate=yes;"))
@@ -224,7 +356,7 @@ summary.logistic <- function(jags.out,
   # 3. Prepare observed data and apply labels
   obs_data <- data.frame(
     X = jags.data$X,
-    mature = jags.data$mature,
+    y = jags.data$y,
     species_idx = jags.data$species_idx
   ) %>%
     mutate(species = factor(species_idx, levels = 1:3, labels = sp.names))
@@ -265,7 +397,7 @@ summary.logistic <- function(jags.out,
               aes(x = median_a50, y = 0.55, label = paste0("A50: ", round(median_a50, 2))),
               hjust = -0.1, color = "firebrick", fontface = "bold") +
     # Observed Data Points
-    geom_jitter(data = obs_data, aes(x = X, y = mature), 
+    geom_jitter(data = obs_data, aes(x = X, y = y), 
                 height = 0.03, width = 0, alpha = 0.4, color = "gray30") +
     facet_wrap(~species) +
     scale_y_continuous(breaks = c(0, 0.5, 1)) +
