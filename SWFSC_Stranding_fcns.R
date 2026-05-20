@@ -9,6 +9,7 @@ jags.logistic <- function(jags.data,
                           out.filename,
                           jags.model,
                           jags.params,
+                          inits = NULL,
                           xvar,
                           yvar,
                           sp.names){
@@ -16,7 +17,7 @@ jags.logistic <- function(jags.data,
     
     tic <- Sys.time()
     jm. <- jagsUI::jags(jags.data,
-                        inits = NULL,
+                        inits = inits,
                         parameters.to.save= jags.params,
                         model.file = jags.model,
                         n.chains = MCMC.params$n.chains,
@@ -28,17 +29,17 @@ jags.logistic <- function(jags.data,
     
     toc <- Sys.time()
     Rhat. <- rank.normalized.R.hat(jm.$samples,
-                                   params = "^mu_beta|^B|^Sigma|^rho",
+                                   params = "^mu_|^L|^slope",
                                    MCMC.params = MCMC.params)
     
     post <- posterior::as_draws(jm.$samples)
     summary.posterior <- posterior::summarise_draws(post)
     
-    jm.summary <- summary.logistic(jags.out = jm.,
-                                   jags.data = jags.data, 
-                                   xvar = xvar,
-                                   yvar = yvar,
-                                   sp.names = sp.names)
+    jm.summary <- summary.logistic.no.B(jags.out = jm.,
+                                        jags.data = jags.data, 
+                                        xvar = xvar,
+                                        yvar = yvar,
+                                        sp.names = sp.names)
     
     jags.out <- list(jags.model = jags.model,
                      jags.data = jags.data,
@@ -59,9 +60,6 @@ jags.logistic <- function(jags.data,
   return(jags.out)
 }
   
-
-
-
 jags.Laird.growth <- function(LAB.data,
                               length.age.data,
                               MCMC.params,
@@ -119,7 +117,7 @@ jags.Laird.growth <- function(LAB.data,
                       jags.data = jags.data,
                       MCMC.params = MCMC.params,
                       jags.out = jm.,
-                      Rhat = Rhat.Stenella.age.length,
+                      Rhat = Rhat.,
                       posterior.summary = summary.posterior,
                       Run.Date = Sys.Date(),
                       Run.Time = toc - tic,
@@ -415,7 +413,133 @@ summary.logistic <- function(jags.out,
               pred.data = pred_data))
 }
 
+# no B matrix logistic model
+summary.logistic.no.B <- function(jags.out,
+                                  jags.data,
+                                  xvar = "Age",
+                                  yvar = "Probability of Maturity",
+                                  sp.names){
+  
+  # 1. Extract the MCMC samples into a matrix
+  # Assuming your coda.samples output is named 'mcmc_logistic'
+  post_matrix <- as.matrix(jags.out$samples)
+  
+  # 2. Create a smooth sequence of lengths for the x-axis
+  # Adjust the min and max lengths based on your actual data
+  min_len <- min(jags.data$X, na.rm = TRUE)
+  max_len <- max(jags.data$X, na.rm = TRUE)
+  length_seq <- seq(min_len, max_len, length.out = 100)
+  
+  # 3. Create an empty dataframe to store the calculated curve data
+  logistic_plot_data <- data.frame()
+  L0_summary_data <- data.frame()
+  
+  # 4. Loop through the 3 species to build the prediction intervals
+  for (s in 1:3) {
+    
+    # Extract the posteriors for the current species
+    L0_samp <- post_matrix[, paste0("L0[", s, "]")]
+    slope_samp <- post_matrix[, paste0("slope[", s, "]")]
+    
+    # Create a matrix to hold the probability predictions
+    # (Rows = MCMC iterations, Columns = length points)
+    p_matrix <- matrix(NA, nrow = nrow(post_matrix), ncol = length(length_seq))
+    
+    # Calculate the probability for every length and every MCMC sample
+    for (i in 1:length(length_seq)) {
+      X <- length_seq[i]
+      
+      # Apply the inverse-logit math formula directly
+      p_matrix[, i] <- 1 / (1 + exp(-slope_samp * (X - L0_samp)))
+    }
+    
+    # 5. Summarize the thousands of predictions into median and 95% intervals
+    species_df <- data.frame(
+      species = s,
+      X = length_seq,
+      fit = apply(p_matrix, 2, quantile, probs = 0.500),
+      lwr = apply(p_matrix, 2, quantile, probs = 0.025),
+      upr = apply(p_matrix, 2, quantile, probs = 0.975)
+    )
+    
+    logistic_plot_data <- rbind(logistic_plot_data, species_df)
+    
+    L0_df <- data.frame(
+      species = s,
+      L0_med = median(L0_samp)
+    )
+    L0_summary_data <- rbind(L0_summary_data, L0_df)
+    
+  }
+  
+  # 6. Apply factor labels for clean ggplot facet titles
+  #species_names <- c("S. attenuata", "S. coeruleoalba", "S. longirostris")
+  
+  logistic_plot_data$species_label <- factor(logistic_plot_data$species, 
+                                             levels = 1:3, 
+                                             labels = sp.names)
+  
+  L0_summary_data$species_label <- factor(L0_summary_data$species, 
+                                          levels = 1:3, 
+                                          labels = sp.names)
+  
+  # 7. Prepare observed data and apply labels
+  obs_data <- data.frame(
+    X = jags.data$X,
+    y = jags.data$y,
+    species_idx = jags.data$species_idx
+  ) %>%
+    mutate(species = factor(species_idx, levels = 1:3, labels = sp.names))
 
+   # 8. Generate the plot
+  p.logistic <- ggplot() +
+    # Add the 95% credible interval ribbon
+    geom_ribbon(data = logistic_plot_data, 
+                aes(x = X, ymin = lwr, ymax = upr), 
+                fill = "seagreen", alpha = 0.3) +
+    
+    # Add the median fitted logistic curve
+    geom_line(data = logistic_plot_data, 
+              aes(x = X, y = fit), 
+              color = "darkgreen", linewidth = 1) +
+    
+    # Add the raw observation points (0 = Prenatal/Immature, 1 = Postnatal/Mature)
+    # Using geom_jitter slightly separates overlapping points on the 0 and 1 lines
+    geom_jitter(data = obs_data, 
+                aes(x = X, y = y), 
+                width = 0, height = 0.02, alpha = 0.3, size = 1.5, color = "black") +
+    
+    # Add a dotted line across the 50% mark to visualize L0
+    geom_hline(yintercept = 0.5, linetype = "dashed", color = "gray50") +
+    
+    geom_vline(data = L0_summary_data, 
+               aes(xintercept = L0_med), 
+               linetype = "dotted", color = "firebrick", linewidth = 0.8) +
+    geom_text(data = L0_summary_data, 
+              aes(x = L0_med, y = 0.25, label = paste0("p50 = ", round(L0_med, 1))), 
+              angle = 90, vjust = -0.7, color = "firebrick", size = 4) +
+    # Create a separate panel for each species
+    facet_wrap(~species_label, scales = "free_x") +
+    
+    
+    # Formatting and labels
+    theme_minimal() +
+    labs(
+      title = "Logistic Regression of Maturity/Postnatal Status",
+      x = xvar,
+      y = yvar,
+      subtitle = "Solid line represents median fit; shaded region represents 95% credible intervals"
+    ) +
+    theme(
+      strip.text = element_text(face = "italic", size = 12),
+      plot.title = element_text(face = "bold", size = 14)
+    )
+  
+  return(list(plot = p.logistic,
+              data = obs_data,
+              p_matrix = p_matrix,
+              plot.data = logistic_plot_data))
+}
 species.col.types <- cols(ID = col_integer(),
                           TaxanomicOrder = col_character(),
                           SubOrder = col_character(),
