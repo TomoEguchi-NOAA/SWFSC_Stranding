@@ -4,27 +4,7 @@
 
 model {
   # ===========================================================
-  # PART 1: LOGISTIC SUB-MODEL (Estimating L0 directly)
-  # ===========================================================
-  for (k in 1:N_post) {
-    is_postnatal[k] ~ dbern(p_post[k])
-    logit(p_post[k]) <- B1[sp_post[k]] * (length_post[k] - L0[sp_post[k]])
-  }
- 
-  for (j in 1:N_species) {
-    L0[j] ~ dnorm(mu_L0, tau_L0) T(0, )
-    B1[j] ~ dnorm(mu_B1, tau_B1) T(0, )
-  }
-  
-  mu_L0 ~ dnorm(82.5, 0.001) T(0, )
-  tau_L0 ~ dgamma(0.01, 0.01)
-  
-  mu_B1 ~ dnorm(0, 0.001) T(0, )
-  tau_B1 ~ dgamma(0.01, 0.01)
-
-
-  # ===========================================================
-  # PART 2: GROWTH SUB-MODEL (One-Sex)
+  # GROWTH SUB-MODEL (Standalone)
   # ===========================================================
   for (i in 1:N_growth) {
     # Phase 1: Juvenile growth curve
@@ -45,8 +25,13 @@ model {
     loglik[i] <- logdensity.norm(length_growth[i], mu[i], tau)
   }
 
-  # Hierarchical Priors for Growth Parameters
+  # ===========================================================
+  # PRIORS
+  # ===========================================================
   for (s in 1:N_species) {
+    # Informative prior for L0 based on the logistic model's posterior!
+    L0[s] ~ dnorm(mu_L0_data[s], tau_L0_data[s]) T(0, )
+    
     a1[s]     ~ dlnorm(mu_a1, tau_a1)
     alpha1[s] ~ dlnorm(mu_alpha1, tau_alpha1)
     a2[s]     ~ dlnorm(mu_a2, tau_a2)
@@ -70,4 +55,3 @@ model {
   tau ~ dgamma(0.01, 0.01)
   sigma <- 1 / sqrt(tau)
 }
-

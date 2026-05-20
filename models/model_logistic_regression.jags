@@ -3,37 +3,28 @@
 # longirostris [3]). 
 
 model {
-
 	for (i in 1:N) {
 		# Likelihood
 		y[i] ~ dbern(p[i])
     
-		# Linear predictor using the beta matrix
-		# species_idx[i] identifies which of the 3 species the sample belongs to
-		logit(p[i]) <- B[species_idx[i], 1] + B[species_idx[i], 2] * X[i]
-		loglik[i] <- logdensity.bern(y[i], p[i])
+		# Reparameterized linear predictor!
+		# X[i] is length, and L0 is directly the 50% maturity length.
+		logit(p[i]) <- slope[species_idx[i]] * (X[i] - L0[species_idx[i]])
 	}
  
-	# Hierarchical Prior for Species-level Effects
+	# Hierarchical Priors for Species-level Effects
 	for (j in 1:n.sp) {
-		# Each species' [intercept, slope] is drawn from an MVN
-		B[j, 1:2] ~ dmnorm(mu_beta[1:2], Omega[1:2, 1:2])
+		# We draw L0 and the slope independently.
+		# T(0, ) forces JAGS to only try positive numbers, preventing crashes!
+		L0[j] ~ dnorm(mu_L0, tau_L0) T(0, )
+		slope[j] ~ dnorm(mu_slope, tau_slope) T(0, ) 
 	}
   
 	# Global Priors (Hyperpriors)
-	# Means for the global intercept and slope
-	mu_beta[1] ~ dnorm(0, 0.001)
-	mu_beta[2] ~ dnorm(0, 0.001)
+	mu_L0 ~ dnorm(82.5, 0.001) T(0, )
+	tau_L0 ~ dgamma(0.01, 0.01)
 
-	# Wishart prior for the Precision Matrix (Omega)
-	# R is a guestimate of the scale matrix (Identity matrix is a common start)
-	# k is the degrees of freedom (typically number of variables + 1)
-	Omega[1:2, 1:2] ~ dwish(R[1:2, 1:2], 3)
-  
-	# Convert Precision Matrix back to Covariance Matrix for interpretation
-	Sigma[1:2, 1:2] <- inverse(Omega[1:2, 1:2])
-  
-	# Derived correlation between intercept and slope
-	rho <- Sigma[1, 2] / sqrt(Sigma[1, 1] * Sigma[2, 2])
-  
+	mu_slope ~ dnorm(0, 0.001) T(0, )
+	tau_slope ~ dgamma(0.01, 0.01)
 }
+
