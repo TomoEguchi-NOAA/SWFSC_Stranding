@@ -6,12 +6,12 @@ model {
 
 	for (i in 1:N) {
 		# Likelihood
-		mature[i] ~ dbern(p[i])
+		y[i] ~ dbern(p[i])
     
 		# Linear predictor using the beta matrix
 		# species_idx[i] identifies which of the 3 species the sample belongs to
 		logit(p[i]) <- B[species_idx[i], 1] + B[species_idx[i], 2] * X[i]
-		loglik[i] <- logdensity.bern(mature[i], p[i])
+		loglik[i] <- logdensity.bern(y[i], p[i])
 	}
  
 	# Hierarchical Prior for Species-level Effects
