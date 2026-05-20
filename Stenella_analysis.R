@@ -15,10 +15,10 @@ library(bayesplot)
 source("SWFSC_Stranding_fcns.R")
 options(mc.cores = parallel::detectCores())
 
-MCMC.params <- list(n.samples = 30000,
-                   n.thin = 100,
-                   n.burnin = 10000,
-                   n.chains = 5)
+MCMC.params.1 <- list(n.samples = 30000,
+                      n.thin = 100,
+                      n.burnin = 10000,
+                      n.chains = 5)
 
 # The database was accessed using SQL_data_extraction.R on the following date.
 # All tables were stored as .csv files - this decision might not have been the
@@ -28,6 +28,9 @@ data.extraction.date <- "2026-05-11"
 # 
 # table.names <- c("_Animal", "_Morphology", "_Age", "_Reproduction",
 #                  "_Bone", "Code_Maturity")
+
+# Define an identity matrix for the Wishart scale matrix
+R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2)
 
 tables. <- read.tables(data.extraction.date)
 
@@ -47,124 +50,43 @@ table.Morph.2.Stenella %>%
          Species.int = as.integer(Species.f)) %>%
   mutate(Mature.idx = ifelse(IsMature.int == 1, 1, 0)) -> Stenella.maturity
 
+sp.names <- paste("S.", levels(Stenella.maturity$Species.f))
+
 ## The average age at sexual maturity (A50)
-jags.out.filename.age <- "RData/jags_out_Stenella_age_logistic.rds"
+jags.data.age <- list(X = Stenella.maturity$Age,          
+                         y = Stenella.maturity$Mature.idx,    
+                         species_idx = Stenella.maturity$Species.int, 
+                         N = nrow(Stenella.maturity),
+                         n.sp = max(Stenella.maturity$Species.int),
+                         R = R_matrix)
 
-if (!file.exists(jags.out.filename.age)){
-  
-  sp.names <- paste("S.", levels(Stenella.maturity$Species.f))
-  
-  jags.params <- c("B", "Sigma", "rho", "mu_beta", "loglik")
-  # Define an identity matrix for the Wishart scale matrix
-  R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2)
-  
-  jags.data <- list(
-    X = Stenella.maturity$Age,          
-    mature = Stenella.maturity$Mature.idx,    
-    species_idx = Stenella.maturity$Species.int, 
-    N = nrow(Stenella.maturity),
-    n.sp = max(Stenella.maturity$Species.int),
-    R = R_matrix
-  )
-  
-  jags.model <- "models/model_logistic_regression.jags"
-  
-  tic <- Sys.time()
-  jm.Stenella.age <- jagsUI::jags(jags.data,
-                                  inits = NULL,
-                                  parameters.to.save= jags.params,
-                                  model.file = jags.model,
-                                  n.chains = MCMC.params$n.chains,
-                                  n.burnin = MCMC.params$n.burnin,
-                                  n.thin = MCMC.params$n.thin,
-                                  n.iter = MCMC.params$n.samples,
-                                  DIC = T,
-                                  parallel=T)
-  
-  toc <- Sys.time()
-  Rhat.Stenella.age <- rank.normalized.R.hat(jm.Stenella.age$samples,
-                                             params = "^mu_beta|^B|^Sigma|^rho",
-                                             MCMC.params = MCMC.params)
-  
-  jm.logistic.summary.age <- summary.logistic(jags.out = jm.Stenella.age,
-                                              jags.data = jags.data, 
-                                              xvar = "Age",
-                                              yvar = "Probability of maturity",
-                                              sp.names = sp.names)
+jags.out.age <- jags.logistic(jags.data = jags.data.age,
+                              MCMC.params = MCMC.params.1,
+                              out.filename = "RData/jags_out_Stenella_age_logistic.rds",
+                              jags.model = "models/model_logistic_regression.jags",
+                              jags.params = c("B", "Sigma", "rho", "mu_beta", "loglik"),
+                              xvar = "Age",
+                              yvar = "Probability of maturity",
+                              sp.names)
 
-  jags.out.age <- list(jags.model = jags.model,
-                       jags.data = jags.data,
-                       MCMC.params = MCMC.params,
-                       jags.out = jm.Stenella.age,
-                       Rhat = Rhat.Stenella.age,
-                       logistic.summary = jm.logistic.summary.age,
-                       Run.Date = Sys.Date(),
-                       Run.Time = toc - tic,
-                       System = Sys.getenv())
-  
-  saveRDS(jags.out.age, 
-          file = jags.out.filename.age)
-} else {
-  jags.out.age <- read_rds(jags.out.filename.age)
-} 
 
 ## The average length at sexual maturity
-jags.out.filename.length <- "RData/jags_out_Stenella_length_logistic.rds"
+## 
+jags.data.length <- list(X = Stenella.maturity$TotalLength_FIELD,          
+                         y = Stenella.maturity$Mature.idx,    
+                         species_idx = Stenella.maturity$Species.int, 
+                         N = nrow(Stenella.maturity),
+                         n.sp = max(Stenella.maturity$Species.int),
+                         R = R_matrix)
 
-if (!file.exists(jags.out.filename.length)){
-  
-  jags.params <- c("B", "Sigma", "rho", "mu_beta", "loglik")
-  # Define an identity matrix for the Wishart scale matrix
-  R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2)
-  
-  # Do a similar analysis with length:
-  jags.data <- list(X = Stenella.maturity$TotalLength_FIELD,          
-                    mature = Stenella.maturity$Mature.idx,    
-                    species_idx = Stenella.maturity$Species.int, 
-                    N = nrow(Stenella.maturity),
-                    n.sp = max(Stenella.maturity$Species.int),
-                    R = R_matrix)
-  
-  jags.model <- "models/model_logistic_regression.jags"
-  
-  tic <- Sys.time()
-  jm.Stenella.length <- jagsUI::jags(jags.data,
-                                     inits = NULL,
-                                     parameters.to.save= jags.params,
-                                     model.file = jags.model,
-                                     n.chains = MCMC.params$n.chains,
-                                     n.burnin = MCMC.params$n.burnin,
-                                     n.thin = MCMC.params$n.thin,
-                                     n.iter = MCMC.params$n.samples,
-                                     DIC = T,
-                                     parallel=T)
-  toc <- Sys.time()
-  
-  Rhat.Stenella.length <- rank.normalized.R.hat(jm.Stenella.length$samples,
-                                                params = "^mu_beta|^B|^Sigma|^rho",
-                                                MCMC.params = MCMC.params)
-  
-  jm.logistic.summary.length <- summary.logistic(jags.out = jm.Stenella.length,
-                                                 jags.data = jags.data, 
-                                                 xvar = "Length",
-                                                 yvar = "Probability of maturity",
-                                                 sp.names = sp.names)
-  
-  jags.out.length <- list(jags.model = jags.model,
-                          jags.data = jags.data,
-                          MCMC.params = MCMC.params,
-                          jags.out = jm.Stenella.length,
-                          Rhat = Rhat.Stenella.length,
-                          logistic.summary = jm.logistic.summary.length,
-                          Run.Date = Sys.Date(),
-                          Run.Time = toc - tic,
-                          System = Sys.getenv())
-  
-  saveRDS(jags.out.length, 
-          file = jags.out.filename.length)
-} else {
-  jags.out.length <- read_rds(jags.out.filename.length)
-} 
+jags.out.length <- jags.logistic(jags.data = jags.data.length,
+                                 MCMC.params = MCMC.params.1,
+                                 out.filename = "RData/jags_out_Stenella_length_logistic.rds",
+                                 jags.model = "models/model_logistic_regression.jags",
+                                 jags.params = c("B", "Sigma", "rho", "mu_beta", "loglik"),
+                                 xvar = "Length",
+                                 yvar = "Probability of maturity",
+                                 sp.names)
 
 ## Age and Growth
 # Age at birth
@@ -193,7 +115,7 @@ table.Morph.2.Stenella %>%
   mutate(Species.int = as.integer(Species.f),
          Status = 1) %>%
   rename(Length = TotalLength_FIELD) %>%
-  filter(Length < 150) -> postnatal
+  filter(Length < 125) -> postnatal
 
 table.Morph.2.Stenella %>%
   select(Species.f, FetusLength_Standard) %>%
@@ -205,77 +127,29 @@ table.Morph.2.Stenella %>%
   rename(Length = FetusLength_Standard) -> prenatal
 
 # No fetus record for frontalis
-Length.at.Birth <- rbind(postnatal, prenatal) 
-
-jags.out.filename.LAB <- "RData/jags_out_Stenella_LAB_logistic.rds"
+Length.at.Birth.data <- rbind(postnatal, prenatal) 
 
 # Convergence issues. Increased the number of samples
-MCMC.params <- list(n.samples = 120000,
-                    n.thin = 100,
-                    n.burnin = 80000,
-                    n.chains = 5)
+MCMC.params.2 <- list(n.samples = 120000,
+                      n.thin = 100,
+                      n.burnin = 80000,
+                      n.chains = 5)
 
-if (!file.exists(jags.out.filename.LAB)){
-  
-  sp.names <- paste("S.", levels(Length.at.Birth$Species.f))
-  jags.params <- c("B", "Sigma", "rho", "mu_beta", "loglik")
-  # Define an identity matrix for the Wishart scale matrix
-  R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2)
-  
-  # Do a similar analysis with length:
-  jags.data <- list(X = Length.at.Birth$Length,          
-                    mature = Length.at.Birth$Status,    
-                    species_idx = Length.at.Birth$Species.int, 
-                    N = nrow(Length.at.Birth),
-                    n.sp = max(Length.at.Birth$Species.int),
-                    R = R_matrix)
-  
-  jags.model <- "models/model_logistic_regression.jags"
-  
-  tic <- Sys.time()
-  jm.Stenella.LAB <- jagsUI::jags(jags.data,
-                                  inits = NULL,
-                                  parameters.to.save= jags.params,
-                                  model.file = jags.model,
-                                  n.chains = MCMC.params$n.chains,
-                                  n.burnin = MCMC.params$n.burnin,
-                                  n.thin = MCMC.params$n.thin,
-                                  n.iter = MCMC.params$n.samples,
-                                  DIC = T,
-                                  parallel=T)
-  toc <- Sys.time()
-  
-  Rhat.Stenella.LAB <- rank.normalized.R.hat(jm.Stenella.LAB$samples,
-                                             params = "^mu_beta|^B|^Sigma|^rho",
-                                             MCMC.params = MCMC.params)
-  
-  jm.logistic.summary.LAB <- summary.logistic(jags.out = jm.Stenella.LAB,
-                                              jags.data = jags.data, 
-                                              xvar = "Length at Birth",
-                                              yvar = "Proportion postnatal",
-                                              sp.names = sp.names)
-  
-  jags.out.LAB <- list(jags.model = jags.model,
-                       jags.data = jags.data,
-                       MCMC.params = MCMC.params,
-                       jags.out = jm.Stenella.LAB,
-                       Rhat = Rhat.Stenella.LAB,
-                       logistic.summary = jm.logistic.summary.LAB,
-                       Run.Date = Sys.Date(),
-                       Run.Time = toc - tic,
-                       System = Sys.getenv())
-  
-  saveRDS(jags.out.LAB, 
-          file = jags.out.filename.LAB)
-} else {
-  jags.out.LAB <- read_rds(jags.out.filename.LAB)
-} 
+jags.data.LAB <- list(X = Length.at.Birth.data$Length,          
+                      y = Length.at.Birth.data$Status,    
+                      species_idx = Length.at.Birth.data$Species.int, 
+                      N = nrow(Length.at.Birth.data),
+                      n.sp = max(Length.at.Birth.data$Species.int),
+                      R = R_matrix)
 
-## Age and Growth curve using a two-phase Laird growth function:
-MCMC.params <- list(n.samples = 120000,
-                    n.thin = 100,
-                    n.burnin = 80000,
-                    n.chains = 5)
+jags.out.LAB <- jags.logistic(jags.data = jags.data.LAB,
+                              MCMC.params = MCMC.params.2,
+                              out.filename = "RData/jags_out_Stenella_LAB_logistic.rds",
+                              jags.model = "models/model_logistic_regression.jags",
+                              jags.params = c("B", "Sigma", "rho", "mu_beta", "loglik"),
+                              xvar = "Length at Birth",
+                              yvar = "Proportion Postnatal",
+                              sp.names)
 
 table.Morph.2.Stenella %>%
   select(Species.f, Age, TotalLength_FIELD, Sex) %>%
@@ -284,110 +158,93 @@ table.Morph.2.Stenella %>%
   droplevels() %>%
   na.omit() %>%
   mutate(species_idx = as.numeric(Species.f),
-         Sex_idx = as.numeric(Sex)) -> age_length
+         Sex_idx = as.numeric(Sex)) -> Length.at.Age.data
 
 # Define the identity matrix for the Wishart prior
 #R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2, ncol = 2)
 
-jags.out.filename.age.length <- "RData/jags_out_Stenella_age_length.rds"
-
-if (!file.exists(jags.out.filename.age.length)){
-  
-  sp.names <- paste("S.", levels(age_length$Species.f))
-  jags.params <- c("B1", "L0", 
-                  "a1", "alpha1", "a2", "alpha2", "tc", "loglik")
-  # Define an identity matrix for the Wishart scale matrix
-  R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2)
-  
-  jags.data <- list(
-    # Logistic Regression Data - same as one above
-    # I use "mature" because the JAGS model was first set up for age at maturity
-    # and the variable is named "mature"
-    N_post = jags.out.LAB$jags.data$N,
-    is_postnatal = jags.out.LAB$jags.data$mature,       # Must be 0 (prenatal) or 1 (postnatal)
-    length_post = jags.out.LAB$jags.data$X,
-    sp_post = jags.out.LAB$jags.data$species_idx,
+generate_inits_1sex <- function() {
+  list(
+    # Logistic parameters
+    mu_L0 = runif(1, min = 80, max = 85),
+    L0 = runif(3, min = 80, max = 85),
+    mu_B1 = runif(1, min = 0.05, max = 0.15),
+    B1 = runif(3, min = 0.05, max = 0.15),
     
-    # Growth Curve Data
-    N_growth = nrow(age_length),
-    age_growth = age_length$Age,
-    length_growth = age_length$TotalLength_FIELD,
-    sp_growth = age_length$species_idx,
-    sex_growth = age_length$Sex_idx,
+    # Growth parameters
+    mu_tc = runif(1, min = 5, max = 7),
+    tc = runif(3, min = 5, max = 7),
     
-    # Shared Constants
-    N_species = max(age_length$species_idx),
-    N_sexes = 2
+    mu_a1 = rnorm(1, mean = 0, sd = 0.1), tau_a1 = runif(1, 0.5, 1.5), 
+    a1 = runif(3, min = 0.1, max = 0.5),
+    
+    mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), tau_alpha1 = runif(1, 0.5, 1.5), 
+    alpha1 = runif(3, min = 0.1, max = 0.5),
+    
+    mu_a2 = rnorm(1, mean = 0, sd = 0.1), tau_a2 = runif(1, 0.5, 1.5), 
+    a2 = runif(3, min = 0.1, max = 0.5),
+    
+    mu_alpha2 = rnorm(1, mean = 0, sd = 0.1), tau_alpha2 = runif(1, 0.5, 1.5), 
+    alpha2 = runif(3, min = 0.1, max = 0.5),
+    
+    # Variance parameter
+    tau = runif(1, min = 0.5, max = 2.0)
   )
-  
-  # 1. Create a function to generate sensible starting values
-  generate_inits_sex <- function() {
-    list(
-      # Logistic parameters
-      mu_L0 = runif(1, min = 80, max = 85),
-      L0 = runif(3, min = 80, max = 85),
-      mu_B1 = runif(1, min = 0.05, max = 0.15),
-      B1 = runif(3, min = 0.05, max = 0.15),
-      
-      # Phase 1 parameters (Vectors of length 3)
-      mu_tc = runif(1, min = 5, max = 7),
-      tc = runif(3, min = 5, max = 7),
-      mu_a1 = rnorm(1, mean = 0, sd = 0.1), 
-      tau_a1 = runif(1, 0.5, 1.5), 
-      a1 = runif(3, min = 0.1, max = 0.5),
-      mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), 
-      tau_alpha1 = runif(1, 0.5, 1.5), 
-      alpha1 = runif(3, min = 0.1, max = 0.5),
-      
-      # Phase 2 parameters (Matrices: 3 rows for species, 2 columns for sex)
-      mu_a2 = rnorm(2, mean = 0, sd = 0.1), 
-      tau_a2 = runif(1, 0.5, 1.5), 
-      a2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
-      
-      mu_alpha2 = rnorm(2, mean = 0, sd = 0.1), 
-      tau_alpha2 = runif(1, 0.5, 1.5), 
-      alpha2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
-      
-      # Variance
-      tau = runif(1, min = 0.5, max = 2.0)
-    )
-  }
-  
-  jags.model <- "models/model_two_phase_Laird_Growth.jags"
-  
-  tic <- Sys.time()
-  jm.Stenella.age.length <- jagsUI::jags(jags.data,
-                                         inits = lapply(1:MCMC.params$n.chains, 
-                                                        function(i) generate_inits_sex()),
-                                         parameters.to.save= jags.params,
-                                         model.file = jags.model,
-                                         n.chains = MCMC.params$n.chains,
-                                         n.burnin = MCMC.params$n.burnin,
-                                         n.thin = MCMC.params$n.thin,
-                                         n.iter = MCMC.params$n.samples,
-                                         DIC = T,
-                                         parallel=T)
-  toc <- Sys.time()
-  
-  Rhat.Stenella.age.length <- rank.normalized.R.hat(jm.Stenella.age.length$samples,
-                                                    params = "^B1|^L0|^a|^tc",
-                                                    MCMC.params = MCMC.params)
-  
-  jags.out.age.length <- list(jags.model = jags.model,
-                              jags.data = jags.data,
-                              MCMC.params = MCMC.params,
-                              jags.out = jm.Stenella.age.length,
-                              Rhat = Rhat.Stenella.age.length,
-                              #logistic.summary = jm.logistic.summary.LAB,
-                              Run.Date = Sys.Date(),
-                              Run.Time = toc - tic,
-                              System = Sys.getenv())
-  
-  saveRDS(jags.out.age.length, 
-          file = jags.out.filename.age.length)
-} else {
-  jags.out.age.length <- read_rds(jags.out.filename.age.length)
-} 
+}
+
+jags.out.Laird <- jags.Laird.growth(LAB.data = Length.at.Birth.data,
+                                    length.age.data = Length.at.Age.data,
+                                    MCMC.params = MCMC.params.2,
+                                    out.filename = "RData/jags_out_Stenella_Laird.rds",
+                                    jags.model = "models/model_two_phase_Laird_Growth.jags",
+                                    jags.params = c("L0", "B1", "a1", "alpha1", "a2", 
+                                                    "alpha2", "tc", "sigma", "loglik"),
+                                    inits.fcn = generate_inits_1sex)
+
+## Add sex as another factor with additional parameters:
+
+# 1. Create a function to generate sensible starting values
+generate_inits_sex <- function() {
+  list(
+    # Logistic parameters
+    mu_L0 = runif(1, min = 80, max = 85),
+    L0 = runif(3, min = 80, max = 85),
+    mu_B1 = runif(1, min = 0.05, max = 0.15),
+    B1 = runif(3, min = 0.05, max = 0.15),
+    
+    # Phase 1 parameters (Vectors of length 3)
+    mu_tc = runif(1, min = 5, max = 7),
+    tc = runif(3, min = 5, max = 7),
+    mu_a1 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_a1 = runif(1, 0.5, 1.5), 
+    a1 = runif(3, min = 0.1, max = 0.5),
+    mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_alpha1 = runif(1, 0.5, 1.5), 
+    alpha1 = runif(3, min = 0.1, max = 0.5),
+    
+    # Phase 2 parameters (Matrices: 3 rows for species, 2 columns for sex)
+    mu_a2 = rnorm(2, mean = 0, sd = 0.1), 
+    tau_a2 = runif(1, 0.5, 1.5), 
+    a2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+    
+    mu_alpha2 = rnorm(2, mean = 0, sd = 0.1), 
+    tau_alpha2 = runif(1, 0.5, 1.5), 
+    alpha2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+    
+    # Variance
+    tau = runif(1, min = 0.5, max = 2.0)
+  )
+}
+
+jags.out.Laird.sex <- jags.Laird.growth(LAB.data = Length.at.Birth.data,
+                                        length.age.data = Length.at.Age.data,
+                                        MCMC.params = MCMC.params.2,
+                                        out.filename = "RData/jags_out_Stenella_Laird_sex.rds",
+                                        jags.model = "models/model_two_phase_Laird_Growth_sex.jags",
+                                        jags.params = c("B1", "L0", "s_a1", "s_a2", "s_alpha1", "s_alpha2",
+                                                        "s_tc", "a1", "alpha1", "a2", "alpha2", "tc", "loglik"),
+                                        inits.fcn = generate_inits_sex)
+
 
 # Plot estimates:
 
