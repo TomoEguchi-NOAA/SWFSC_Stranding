@@ -180,18 +180,16 @@ table.Morph.2.Stenella %>%
   droplevels() %>%
   na.omit() %>%
   mutate(species_idx = as.numeric(Species.f),
-         Sex_idx = as.numeric(Sex)) -> Length.at.Age.data
+         Sex_idx = as.numeric(Sex),
+         Length = TotalLength_FIELD) -> Length.at.Age.data
 
 # Define the identity matrix for the Wishart prior
 #R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2, ncol = 2)
 
 generate_inits_1sex <- function() {
   list(
-    # Logistic parameters
-    mu_L0 = runif(1, min = 80, max = 85),
-    L0 = runif(3, min = 80, max = 85),
-    mu_B1 = runif(1, min = 0.05, max = 0.15),
-    B1 = runif(3, min = 0.05, max = 0.15),
+    # We can still start L0 near our empirical means to help it initialize smoothly
+    L0 = mu_L0_est, 
     
     # Growth parameters
     mu_tc = runif(1, min = 5, max = 7),
@@ -209,17 +207,50 @@ generate_inits_1sex <- function() {
     mu_alpha2 = rnorm(1, mean = 0, sd = 0.1), tau_alpha2 = runif(1, 0.5, 1.5), 
     alpha2 = runif(3, min = 0.1, max = 0.5),
     
-    # Variance parameter
     tau = runif(1, min = 0.5, max = 2.0)
   )
 }
 
-jags.out.Laird <- jags.Laird.growth(LAB.data = Length.at.Birth.data,
-                                    length.age.data = Length.at.Age.data,
+# Just growth, without estimating L0 at the same time
+post_matrix <- as.matrix(jags.out.LAB$jags.out$samples)
+
+# 1. Calculate the mean L0 for each species
+mu_L0_est <- c(
+  mean(post_matrix[, "L0[1]"]),
+  mean(post_matrix[, "L0[2]"]),
+  mean(post_matrix[, "L0[3]"])
+)
+
+# 2. Calculate the standard deviation, then convert to precision (tau = 1 / variance)
+sd_L0_est <- c(
+  sd(post_matrix[, "L0[1]"]),
+  sd(post_matrix[, "L0[2]"]),
+  sd(post_matrix[, "L0[3]"])
+)
+tau_L0_est <- 1 / (sd_L0_est^2)
+
+jags.data.growth <- list(
+  N_growth = nrow(Length.at.Age.data),
+  age_growth = Length.at.Age.data$Age,
+  length_growth = Length.at.Age.data$Length,
+  sp_growth = Length.at.Age.data$species_idx,
+  N_species = 3,
+  
+  # Injecting our posterior summaries as fixed data
+  mu_L0_data = mu_L0_est, 
+  tau_L0_data = tau_L0_est
+)
+
+
+# Create the list of lists for 5 chains
+inits_list_growth <- lapply(1:MCMC.params.2$n.chains, 
+                               function(i) generate_inits_growth())
+
+jags.out.Laird <- jags.Laird.growth(jags.data = jags.data.growth,
                                     MCMC.params = MCMC.params.2,
                                     out.filename = "RData/jags_out_Stenella_Laird.rds",
-                                    jags.model = "models/model_two_phase_Laird_L0_Growth.jags",
-                                    jags.params = c("L0", "B1", "a1", "alpha1", "a2", 
+                                    jags.model = "models/model_two_phase_Laird_Growth.jags",
+                                    jags.params = c("L0", "a1", "alpha1", "a2", 
                                                     "alpha2", "tc", "sigma", "loglik"),
                                     inits.fcn = generate_inits_1sex)
 
@@ -267,35 +298,6 @@ jags.out.Laird.sex <- jags.Laird.growth(LAB.data = Length.at.Birth.data,
                                                         "s_tc", "a1", "alpha1", "a2", "alpha2", "tc", "loglik"),
                                         inits.fcn = generate_inits_sex)
 
-# Just growth, without estimating L0 at the same time
-post_matrix <- as.matrix(jags.out.LAB$jags.out$samples)
-
-# 1. Calculate the mean L0 for each species
-mu_L0_est <- c(
-  mean(post_matrix[, "L0[1]"]),
-  mean(post_matrix[, "L0[2]"]),
-  mean(post_matrix[, "L0[3]"])
-)
-
-# 2. Calculate the standard deviation, then convert to precision (tau = 1 / variance)
-sd_L0_est <- c(
-  sd(post_matrix[, "L0[1]"]),
-  sd(post_matrix[, "L0[2]"]),
-  sd(post_matrix[, "L0[3]"])
-)
-tau_L0_est <- 1 / (sd_L0_est^2)
-
-jags_data_growth <- list(
-  N_growth = nrow(Length.at.Age.data),
-  age_growth = Length.at.Age.data$Age,
-  length_growth = Length.at.Age.data$Length,
-  sp_growth = Length.at.Age.data$species_idx,
-  N_species = 3,
-  
-  # Injecting our posterior summaries as fixed data
-  mu_L0_data = mu_L0_est, 
-  tau_L0_data = tau_L0_est
-)
 
 
 # 6. Format the labels for ggplot2
