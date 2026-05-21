@@ -60,8 +60,7 @@ jags.logistic <- function(jags.data,
   return(jags.out)
 }
   
-jags.Laird.growth <- function(LAB.data,
-                              length.age.data,
+jags.Laird.growth <- function(jags.data,
                               MCMC.params,
                               out.filename,
                               jags.model,
@@ -72,25 +71,6 @@ jags.Laird.growth <- function(LAB.data,
     
     # Define an identity matrix for the Wishart scale matrix
     #R_matrix <- matrix(c(1, 0, 0, 1), nrow = 2)
-    
-    jags.data <- list(
-      # Logistic Regression Data -
-      N_post = nrow(LAB.data),
-      is_postnatal = LAB.data$Status,       # Must be 0 (prenatal) or 1 (postnatal)
-      length_post = LAB.data$Length,
-      sp_post = LAB.data$Species.int,
-      
-      # Growth Curve Data
-      N_growth = nrow(length.age.data),
-      age_growth = length.age.data$Age,
-      length_growth = length.age.data$TotalLength_FIELD,
-      sp_growth = length.age.data$species_idx,
-      sex_growth = length.age.data$Sex_idx,
-      
-      # Shared Constants
-      N_species = max(length.age.data$species_idx),
-      N_sexes = 2
-    )
     
     tic <- Sys.time()
     jm. <- jagsUI::jags(jags.data,
