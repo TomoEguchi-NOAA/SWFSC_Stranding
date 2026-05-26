@@ -103,16 +103,14 @@ jags.Laird.growth <- function(jags.data,
                       Run.Time = toc - tic,
                       System = Sys.getenv())
     
-    saveRDS(jags.out.age.length, 
-            file = jags.out.filename.age.length.sex)
+    saveRDS(jags.out., 
+            file = out.filename)
   } else {
-    jags.out. <- read_rds(jags.out.filename.age.length)
+    jags.out. <- read_rds(out.filename)
   }   
   
-  return(jags.out)
+  return(jags.out.)
 }
-
-
 
 connection.string <- function(database){
   # return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-s;Database=",

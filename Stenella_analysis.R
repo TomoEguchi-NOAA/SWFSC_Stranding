@@ -59,6 +59,19 @@ jags.data.age <- list(X = Stenella.maturity$Age,
                       N = nrow(Stenella.maturity),
                       n.sp = max(Stenella.maturity$Species.int))
 
+# 1. Update the function to accept a starting guess for the 50% mark
+generate_inits_logistic <- function(start_p50) {
+  list(
+    # Center the random guesses around whatever start_p50 you provide
+    mu_L0 = runif(1, min = start_p50 - 10, max = start_p50 + 10),
+    L0 = runif(3, min = start_p50 - 10, max = start_p50 + 10),
+    
+    # Keep the slope small and positive
+    mu_slope = runif(1, min = 0.01, max = 0.1),
+    slope = runif(3, min = 0.01, max = 0.1)
+  )
+}
+
 n_chains <- MCMC.params.1$n.chains
 inits.age <- lapply(1:n_chains, function(i) generate_inits_logistic(start_p50 = 10))
 
@@ -81,19 +94,6 @@ jags.data.length <- list(X = Stenella.maturity$TotalLength_FIELD,
                          N = nrow(Stenella.maturity),
                          n.sp = max(Stenella.maturity$Species.int))
 
-# 1. Update the function to accept a starting guess for the 50% mark
-generate_inits_logistic <- function(start_p50) {
-  list(
-    # Center the random guesses around whatever start_p50 you provide
-    mu_L0 = runif(1, min = start_p50 - 10, max = start_p50 + 10),
-    L0 = runif(3, min = start_p50 - 10, max = start_p50 + 10),
-    
-    # Keep the slope small and positive
-    mu_slope = runif(1, min = 0.01, max = 0.1),
-    slope = runif(3, min = 0.01, max = 0.1)
-  )
-}
-
 n_chains <- MCMC.params.1$n.chains
 inits.length <- lapply(1:n_chains, function(i) generate_inits_logistic(start_p50 = 188))
 
@@ -101,7 +101,8 @@ jags.out.length <- jags.logistic(jags.data = jags.data.length,
                                  MCMC.params = MCMC.params.1,
                                  out.filename = "RData/jags_out_Stenella_length_logistic.rds",
                                  jags.model = "models/model_logistic_regression.jags",
-                                 jags.params = c("L0", "slope", "mu_L0", "mu_slope", "tau_L0", "tau_slope"),
+                                 jags.params = c("L0", "slope", "mu_L0", "mu_slope", 
+                                                 "tau_L0", "tau_slope"),
                                  inits = inits.length,
                                  xvar = "Length",
                                  yvar = "Probability of maturity",
@@ -153,6 +154,12 @@ MCMC.params.2 <- list(n.samples = 120000,
                       n.thin = 100,
                       n.burnin = 80000,
                       n.chains = 5)
+
+# Test MCMC setup for debugging
+# MCMC.params.2 <- list(n.samples = 1200,
+#                       n.thin = 2,
+#                       n.burnin = 800,
+#                       n.chains = 5)
 
 jags.data.LAB <- list(X = Length.at.Birth.data$Length,          
                       y = Length.at.Birth.data$Status,    
@@ -241,10 +248,9 @@ jags.data.growth <- list(
   tau_L0_data = tau_L0_est
 )
 
-
 # Create the list of lists for 5 chains
-inits_list_growth <- lapply(1:MCMC.params.2$n.chains, 
-                               function(i) generate_inits_growth())
+# inits_list_growth <- lapply(1:MCMC.params.2$n.chains, 
+#                                function(i) generate_inits_growth())
 
 jags.out.Laird <- jags.Laird.growth(jags.data = jags.data.growth,
                                     MCMC.params = MCMC.params.2,
@@ -289,67 +295,72 @@ generate_inits_sex <- function() {
   )
 }
 
-jags.out.Laird.sex <- jags.Laird.growth(LAB.data = Length.at.Birth.data,
-                                        length.age.data = Length.at.Age.data,
+jags.data.growth.sex <- jags.data.growth
+jags.data.growth.sex$sex_growth <- Length.at.Age.data$Sex_idx
+jags.data.growth.sex$N_sex <- max(Length.at.Age.data$Sex_idx)
+
+jags.out.Laird.sex <- jags.Laird.growth(jags.data = jags.data.growth.sex,
                                         MCMC.params = MCMC.params.2,
                                         out.filename = "RData/jags_out_Stenella_Laird_sex.rds",
-                                        jags.model = "models/model_two_phase_Laird_L0_Growth_sex.jags",
-                                        jags.params = c("B1", "L0", "s_a1", "s_a2", "s_alpha1", "s_alpha2",
-                                                        "s_tc", "a1", "alpha1", "a2", "alpha2", "tc", "loglik"),
+                                        jags.model = "models/model_two_phase_Laird_Growth_sex.jags",
+                                        jags.params = c("B1", "L0", "s_a1", 
+                                                        "s_a2", "s_alpha1", "s_alpha2",
+                                                        "s_tc", "a1", "alpha1", "a2", 
+                                                        "alpha2", "tc", "loglik"),
                                         inits.fcn = generate_inits_sex)
 
 
-
-# 6. Format the labels for ggplot2
-# Predicted curve labels
-plot_data$species_label <- factor(plot_data$species, 
-                                  levels = 1:3, 
-                                  labels = c("S. attenuata", "S. coeruleoalba", "S. longirostris"))
-plot_data$sex_label <- factor(plot_data$sex, 
-                              levels = c(1, 2), 
-                              labels = c("Female", "Male"))
-
-# Raw data labels (assuming 'growth_data$sex' is already 1 for Female, 2 for Male)
-growth_data$species_label <- factor(as.numeric(as.factor(growth_data$species)), 
-                                    levels = 1:3, 
-                                    labels = c("S. attenuata", "S. coeruleoalba", "S. longirostris"))
-growth_data$sex_label <- factor(as.numeric(as.factor(growth_data$sex)), 
-                                levels = c(1, 2), 
-                                labels = c("Female", "Male"))
-
-# 7. Plot using ggplot2
-ggplot() +
-  # 95% credible interval ribbons mapped to sex
-  geom_ribbon(data = plot_data, aes(x = age, ymin = lwr, ymax = upr, fill = sex_label), 
-              alpha = 0.3) +
-  
-  # Median fitted curves mapped to sex
-  geom_line(data = plot_data, aes(x = age, y = fit, color = sex_label), 
-            linewidth = 1) +
-  
-  # Raw data points mapped to sex
-  geom_point(data = growth_data, aes(x = age, y = length, color = sex_label), 
-             alpha = 0.4, size = 1.5) +
-  
-  # Facet by species
-  facet_wrap(~species_label, scales = "free_x") +
-  
-  # Custom colors to easily distinguish males and females
-  scale_color_manual(values = c("Female" = "darkorange", "Male" = "steelblue")) +
-  scale_fill_manual(values = c("Female" = "darkorange", "Male" = "steelblue")) +
-  
-  # Formatting
-  theme_minimal() +
-  labs(
-    title = "Sex-Specific Two-Phase Laird Growth Curves",
-    x = "Age (Years / Layers)",
-    y = "Length (cm)",
-    color = "Sex",
-    fill = "Sex",
-    subtitle = "Solid lines indicate median fits; shaded regions indicate 95% credible intervals"
-  ) +
-  theme(
-    strip.text = element_text(face = "italic", size = 12),
-    plot.title = element_text(face = "bold", size = 14),
-    legend.position = "bottom"
-  )
+# 
+# # 6. Format the labels for ggplot2
+# # Predicted curve labels
+# plot_data$species_label <- factor(plot_data$species, 
+#                                   levels = 1:3, 
+#                                   labels = c("S. attenuata", "S. coeruleoalba", "S. longirostris"))
+# plot_data$sex_label <- factor(plot_data$sex, 
+#                               levels = c(1, 2), 
+#                               labels = c("Female", "Male"))
+# 
+# # Raw data labels (assuming 'growth_data$sex' is already 1 for Female, 2 for Male)
+# growth_data$species_label <- factor(as.numeric(as.factor(growth_data$species)), 
+#                                     levels = 1:3, 
+#                                     labels = c("S. attenuata", "S. coeruleoalba", "S. longirostris"))
+# growth_data$sex_label <- factor(as.numeric(as.factor(growth_data$sex)), 
+#                                 levels = c(1, 2), 
+#                                 labels = c("Female", "Male"))
+# 
+# # 7. Plot using ggplot2
+# ggplot() +
+#   # 95% credible interval ribbons mapped to sex
+#   geom_ribbon(data = plot_data, aes(x = age, ymin = lwr, ymax = upr, fill = sex_label), 
+#               alpha = 0.3) +
+#   
+#   # Median fitted curves mapped to sex
+#   geom_line(data = plot_data, aes(x = age, y = fit, color = sex_label), 
+#             linewidth = 1) +
+#   
+#   # Raw data points mapped to sex
+#   geom_point(data = growth_data, aes(x = age, y = length, color = sex_label), 
+#              alpha = 0.4, size = 1.5) +
+#   
+#   # Facet by species
+#   facet_wrap(~species_label, scales = "free_x") +
+#   
+#   # Custom colors to easily distinguish males and females
+#   scale_color_manual(values = c("Female" = "darkorange", "Male" = "steelblue")) +
+#   scale_fill_manual(values = c("Female" = "darkorange", "Male" = "steelblue")) +
+#   
+#   # Formatting
+#   theme_minimal() +
+#   labs(
+#     title = "Sex-Specific Two-Phase Laird Growth Curves",
+#     x = "Age (Years / Layers)",
+#     y = "Length (cm)",
+#     color = "Sex",
+#     fill = "Sex",
+#     subtitle = "Solid lines indicate median fits; shaded regions indicate 95% credible intervals"
+#   ) +
+#   theme(
+#     strip.text = element_text(face = "italic", size = 12),
+#     plot.title = element_text(face = "bold", size = 14),
+#     legend.position = "bottom"
+#   )

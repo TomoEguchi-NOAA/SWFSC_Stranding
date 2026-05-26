@@ -3,35 +3,18 @@
 # Provided by Gemini Coding Partner
 
 model {
-  # ===========================================================
-  # PART 1: LOGISTIC SUB-MODEL (Shared by sex within species)
-  # ===========================================================
-  for (k in 1:N_post) {
-    is_postnatal[k] ~ dbern(p_post[k])
-    logit(p_post[k]) <- B1[sp_post[k]] * (length_post[k] - L0[sp_post[k]])
-  }
- 
-  for (j in 1:N_species) {
-    L0[j] ~ dnorm(mu_L0, tau_L0) T(0, )
-    B1[j] ~ dnorm(mu_B1, tau_B1) T(0, )
-  }
-  
-  mu_L0 ~ dnorm(82.5, 0.001) T(0, )
-  tau_L0 ~ dgamma(0.01, 0.01)
-  
-  mu_B1 ~ dnorm(0, 0.001) T(0, )
-  tau_B1 ~ dgamma(0.01, 0.01)
 
-  # ===========================================================
-  # PART 2: GROWTH SUB-MODEL (Incorporating Sexual Dimorphism)
+# ===========================================================
+  # GROWTH SUB-MODEL ((Incorporating Sexual Dimorphism))
   # ===========================================================
   for (i in 1:N_growth) {
     # Phase 1: Juvenile growth curve (Shared between sexes)
     mu1[i] <- L0[sp_growth[i]] * exp((a1[sp_growth[i]] / alpha1[sp_growth[i]]) * (1 - exp(-alpha1[sp_growth[i]] * age_growth[i])))
     
-    # Calculate Phase 1 ending length at the changepoint (Lc)
+	# Calculate Phase 1 ending length at the changepoint (Lc)
     Lc[i] <- L0[sp_growth[i]] * exp((a1[sp_growth[i]] / alpha1[sp_growth[i]]) * (1 - exp(-alpha1[sp_growth[i]] * tc[sp_growth[i]])))
     
+	
     # Phase 2: Adult growth curve (Notice a2 and alpha2 are indexed by [sp, sex]!)
     mu2[i] <- Lc[i] * exp((a2[sp_growth[i], sex_growth[i]] / alpha2[sp_growth[i], sex_growth[i]]) * (1 - exp(-alpha2[sp_growth[i], sex_growth[i]] * (age_growth[i] - tc[sp_growth[i]]))))
     
@@ -42,22 +25,28 @@ model {
     # Likelihood for continuous length data
     length_growth[i] ~ dnorm(mu[i], tau)
     
-    # Log-likelihood for LOO-CV
+    # Log-likelihood for Pareto-k / LOO-CV diagnostics
     loglik[i] <- logdensity.norm(length_growth[i], mu[i], tau)
   }
 
-  # Hierarchical Priors for Growth Parameters
+
+  # ===========================================================
+  # PRIORS
+  # ===========================================================
+  # For juveniles - common between two sexes
   for (s in 1:N_species) {
-    # Shared juvenile parameters
+    # Informative prior for L0 based on the logistic model's posterior!
+    L0[s] ~ dnorm(mu_L0_data[s], tau_L0_data[s]) T(0, )
+    
     a1[s]     ~ dlnorm(mu_a1, tau_a1)
     alpha1[s] ~ dlnorm(mu_alpha1, tau_alpha1)
     tc[s]     ~ dnorm(mu_tc, tau_tc) T(0, )
-    
-    # Sex-specific adult parameters
-    for (x in 1:N_sexes) {
-      a2[s, x]     ~ dlnorm(mu_a2[x], tau_a2)
-      alpha2[s, x] ~ dlnorm(mu_alpha2[x], tau_alpha2)
-    }
+	
+	# For adults - sex specific
+	for (x in 1:N_sex) {
+		a2[s, x] ~ dlnorm(mu_a2[x], tau_a2)
+		alpha2[s,x] ~ dlnorm(mu_alpha2[x], tau_alpha2)
+	}
   }
 
   # Global Priors for Growth Model
@@ -74,7 +63,7 @@ model {
   s_tc <- 1/sqrt(tau_tc)
   
   # Hyperparameters split by sex for adult growth
-  for (x in 1:N_sexes) {
+  for (x in 1:N_sex) {
     mu_a2[x] ~ dnorm(0, 0.001)
     mu_alpha2[x] ~ dnorm(0, 0.001)
   }
