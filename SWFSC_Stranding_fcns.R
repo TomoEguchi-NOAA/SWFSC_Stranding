@@ -129,22 +129,22 @@ read.tables <- function(data.extraction.date){
   # All column types are stored below
   # There were some extensive editing (mostly deleting entries) for the Species
   # table. So, I'm not going to change the data file from 2026-05-12
-  table.Species <- read_csv(file = paste0("Data/tblSpecies.csv"),
+  table.Species <- read_csv(file = paste0("data/tblSpecies.csv"),
                             col_types = species.col.types) %>%
     rename(SpeciesID = SpCode) %>%
     select(-c(EditDate, EditUser, RecordCreationDate))
   
-  table.Morph <- read_csv(file = paste0("Data/tbl_Morphology_", 
+  table.Morph <- read_csv(file = paste0("data/tbl_Morphology_", 
                                         data.extraction.date, ".csv"),
                           col_types = morph.col.types) %>%
     select(-c(EditDate, EditUser, RecordCreationDate))
   
-  table.Animal <- read_csv(file = paste0("Data/tbl_Animal_", 
+  table.Animal <- read_csv(file = paste0("data/tbl_Animal_", 
                                          data.extraction.date, ".csv"),
                            col_types = animal.col.types) %>%
     select(-c(EditDate, EditUser, RecordCreationDate))
   
-  table.Age <- read_csv(file = paste0("Data/tbl_Age_", 
+  table.Age <- read_csv(file = paste0("data/tbl_Age_", 
                                       data.extraction.date, ".csv"),
                         col_types = age.col.types) %>%
     select(-c(EditDate, EditUser, RecordCreationDate))
@@ -153,12 +153,12 @@ read.tables <- function(data.extraction.date){
     filter(IsAnalysisQuality == "Y") %>%
     left_join(table.Animal, by = "Specimen") -> table.Age.1
   
-  table.Repro <- read_csv(file = paste0("Data/tbl_Reproduction_", 
+  table.Repro <- read_csv(file = paste0("data/tbl_Reproduction_", 
                                         data.extraction.date, ".csv"),
                           col_types = repro.col.types) %>%
     select(-c(EditDate, EditUser, RecordCreationDate))
   
-  table.Weight <- read_csv(file = paste0("Data/tbl_Weight_", 
+  table.Weight <- read_csv(file = paste0("data/tbl_Weight_", 
                                          data.extraction.date, ".csv"),
                            col_types = weight.col.types) %>%
     select(-c(EditDate, EditUser, RecordCreationDate))
