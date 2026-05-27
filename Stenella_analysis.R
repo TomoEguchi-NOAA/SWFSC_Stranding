@@ -203,16 +203,20 @@ generate_inits_1sex <- function() {
     mu_tc = runif(1, min = 5, max = 7),
     tc = runif(3, min = 5, max = 7),
     
-    mu_a1 = rnorm(1, mean = 0, sd = 0.1), tau_a1 = runif(1, 0.5, 1.5), 
+    mu_a1 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_a1 = runif(1, 0.5, 1.5), 
     a1 = runif(3, min = 0.1, max = 0.5),
     
-    mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), tau_alpha1 = runif(1, 0.5, 1.5), 
+    mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_alpha1 = runif(1, 0.5, 1.5), 
     alpha1 = runif(3, min = 0.1, max = 0.5),
     
-    mu_a2 = rnorm(1, mean = 0, sd = 0.1), tau_a2 = runif(1, 0.5, 1.5), 
+    mu_a2 = rnorm(1, mean = 0, sd = 0.1), 
+    au_a2 = runif(1, 0.5, 1.5), 
     a2 = runif(3, min = 0.1, max = 0.5),
     
-    mu_alpha2 = rnorm(1, mean = 0, sd = 0.1), tau_alpha2 = runif(1, 0.5, 1.5), 
+    mu_alpha2 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_alpha2 = runif(1, 0.5, 1.5), 
     alpha2 = runif(3, min = 0.1, max = 0.5),
     
     tau = runif(1, min = 0.5, max = 2.0)
@@ -256,9 +260,10 @@ jags.data.growth <- list(
 jags.out.Laird <- jags.Laird.growth(jags.data = jags.data.growth,
                                     MCMC.params = MCMC.params.2,
                                     out.filename = "RData/jags_out_Stenella_Laird.rds",
-                                    jags.model = "models/model_two_phase_Laird_Growth.jags",
-                                    jags.params = c("L0", "a1", "alpha1", "a2", 
-                                                    "alpha2", "tc", "sigma", "loglik"),
+                                    jags.model = "models/model_two_phase_Laird.jags",
+                                    jags.params = c("L0", "a1", "alpha1", "a2", "alpha2", "tc",
+                                                    "s_a1", "s_a2", "s_alpha1", "s_alpha2",
+                                                    "s_tc", "sigma", "loglik"),
                                     inits.fcn = generate_inits_1sex)
 
 ## Add sex as another factor with additional parameters:
@@ -303,12 +308,181 @@ jags.data.growth.sex$N_sex <- max(Length.at.Age.data$Sex_idx)
 jags.out.Laird.sex <- jags.Laird.growth(jags.data = jags.data.growth.sex,
                                         MCMC.params = MCMC.params.2,
                                         out.filename = "RData/jags_out_Stenella_Laird_sex.rds",
-                                        jags.model = "models/model_two_phase_Laird_Growth_sex.jags",
-                                        jags.params = c("B1", "L0", "s_a1", 
-                                                        "s_a2", "s_alpha1", "s_alpha2",
-                                                        "s_tc", "a1", "alpha1", "a2", 
-                                                        "alpha2", "tc", "loglik"),
+                                        jags.model = "models/model_two_phase_Laird_sex.jags",
+                                        jags.params = c("L0", "a1", "alpha1", "a2", "alpha2", "tc",
+                                                        "s_a1", "s_a2", "s_alpha1", "s_alpha2",
+                                                        "s_tc", "sigma", "loglik"),
                                         inits.fcn = generate_inits_sex)
+
+#Test MCMC setup for debugging
+# MCMC.params.2 <- list(n.samples = 1200,
+#                       n.thin = 2,
+#                       n.burnin = 800,
+#                       n.chains = 5)
+
+generate_inits_1sex_2vars <- function() {
+  list(
+    # We can still start L0 near our empirical means to help it initialize smoothly
+    L0 = mu_L0_est, 
+    
+    # Growth parameters
+    mu_tc = runif(1, min = 5, max = 7),
+    tc = runif(3, min = 5, max = 7),
+    
+    mu_a1 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_a1 = runif(1, 0.5, 1.5), 
+    a1 = runif(3, min = 0.1, max = 0.5),
+    
+    mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_alpha1 = runif(1, 0.5, 1.5), 
+    alpha1 = runif(3, min = 0.1, max = 0.5),
+    
+    mu_a2 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_a2 = runif(1, 0.5, 1.5), 
+    a2 = runif(3, min = 0.1, max = 0.5),
+    
+    mu_alpha2 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_alpha2 = runif(1, 0.5, 1.5), 
+    alpha2 = runif(3, min = 0.1, max = 0.5),
+    
+    # Differentiated starting precisions
+    tau_juv = runif(1, min = 1.0, max = 3.0),   # Tighter spread
+    tau_adult = runif(1, min = 0.1, max = 0.5)  # Wider spread
+  )
+}
+
+jags.out.Laird.1sex.2vars <- jags.Laird.growth(jags.data = jags.data.growth.sex,
+                                               MCMC.params = MCMC.params.2,
+                                               out.filename = "RData/jags_out_Stenella_Laird_2vars.rds",
+                                               jags.model = "models/model_two_phase_Laird_2vars.jags",
+                                               jags.params = c("L0", "a1", "alpha1", "a2", "alpha2", "tc",
+                                                               "s_a1", "s_a2", "s_alpha1", "s_alpha2",
+                                                               "s_tc", "s_juv", "s_adult", "loglik"),
+                                               inits.fcn = generate_inits_1sex_2vars)
+
+
+generate_inits_sex_2vars <- function() {
+  list(
+    # Logistic parameters
+    mu_L0 = runif(1, min = 80, max = 85),
+    L0 = runif(3, min = 80, max = 85),
+    mu_B1 = runif(1, min = 0.05, max = 0.15),
+    B1 = runif(3, min = 0.05, max = 0.15),
+    
+    # Phase 1 parameters (Vectors of length 3)
+    mu_tc = runif(1, min = 5, max = 7),
+    tc = runif(3, min = 5, max = 7),
+    mu_a1 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_a1 = runif(1, 0.5, 1.5), 
+    a1 = runif(3, min = 0.1, max = 0.5),
+    mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_alpha1 = runif(1, 0.5, 1.5), 
+    alpha1 = runif(3, min = 0.1, max = 0.5),
+    
+    # Phase 2 parameters (Matrices: 3 rows for species, 2 columns for sex)
+    mu_a2 = rnorm(2, mean = 0, sd = 0.1), 
+    tau_a2 = runif(1, 0.5, 1.5), 
+    a2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+    
+    mu_alpha2 = rnorm(2, mean = 0, sd = 0.1), 
+    tau_alpha2 = runif(1, 0.5, 1.5), 
+    alpha2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+    
+    # Differentiated starting precisions
+    tau_juv = runif(1, min = 1.0, max = 3.0),   # Tighter spread
+    tau_adult = runif(1, min = 0.1, max = 0.5)  # Wider spread
+  )
+}
+
+
+jags.out.Laird.2sex.2vars <- jags.Laird.growth(jags.data = jags.data.growth.sex,
+                                               MCMC.params = MCMC.params.2,
+                                               out.filename = "RData/jags_out_Stenella_Laird_sex_2vars.rds",
+                                               jags.model = "models/model_two_phase_Laird_sex_2vars.jags",
+                                               jags.params = c("L0", "a1", "alpha1", "a2", "alpha2", "tc",
+                                                               "s_a1", "s_a2", "s_alpha1", "s_alpha2",
+                                                               "s_tc", "s_juv", "s_adult", "loglik"),
+                                               inits.fcn = generate_inits_sex_2vars)
+
+#Test MCMC setup for debugging
+MCMC.params.2 <- list(n.samples = 1200,
+                      n.thin = 2,
+                      n.burnin = 800,
+                      n.chains = 5)
+
+generate_inits_mixture <- function() {
+  list(
+    L0 = mu_L0_est, 
+    
+    mu_tc = runif(1, min = 5, max = 7),
+    tc = runif(3, min = 5, max = 7),
+    
+    mu_a1 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_a1 = runif(1, 0.5, 1.5), 
+    a1 = runif(3, min = 0.1, max = 0.5),
+    
+    mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_alpha1 = runif(1, 0.5, 1.5), 
+    alpha1 = runif(3, min = 0.1, max = 0.5),
+    
+    mu_a2 = rnorm(1, mean = 0, sd = 0.1), 
+    tau_a2 = runif(1, 0.5, 1.5), 
+    a2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+    
+    # Initialize L_inf inside our bounded constraints
+    L_inf = matrix(c(200, 200, 200, 230, 200, 200), nrow = 3, ncol = 2),
+    
+    p_coastal = runif(1, 0.1, 0.9),
+    
+    tau_juv = runif(1, min = 1.0, max = 3.0),   
+    tau_adult = runif(1, min = 0.1, max = 0.5)  
+  )
+}
+
+jags.out.Laird.2vars.mix <- jags.Laird.growth(jags.data = jags.data.growth.sex,
+                                               MCMC.params = MCMC.params.2,
+                                               out.filename = "RData/jags_out_Stenella_Laird_2vars_mix.rds",
+                                               jags.model = "models/model_two_phase_Laird_2vars_mix.jags",
+                                               jags.params = c("L0", "a1", "alpha1", "a2", "tc",
+                                                               "s_a1", "s_a2", "s_alpha1", "s_tc",  
+                                                               "s_juv", "s_adult", "z_aux", "p_coastal",
+                                                               "loglik"),
+                                               inits.fcn = generate_inits_mixture)
+
+
+generate_inits_mix_sex <- function() {
+  # Build a 3D array for L_inf starting values
+  L_inf_start <- array(200, dim = c(3, 2, 2))
+  
+  # Give S. attenuata sensible starts based on our bounds
+  L_inf_start[1, 1, 1] <- 190  # Offshore Female
+  L_inf_start[1, 1, 2] <- 200  # Offshore Male
+  L_inf_start[1, 2, 1] <- 220  # Coastal Female
+  L_inf_start[1, 2, 2] <- 230  # Coastal Male
+  
+  list(
+    L0 = mu_L0_est, 
+    tc = runif(3, min = 5, max = 7),
+    a1 = runif(3, min = 0.1, max = 0.5),
+    alpha1 = runif(3, min = 0.1, max = 0.5),
+    a2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+    L_inf = L_inf_start,
+    p_coastal = runif(1, 0.1, 0.9),
+    tau_juv = runif(1, min = 1.0, max = 3.0),   
+    tau_adult = runif(1, min = 0.1, max = 0.5)  
+  )
+}
+
+jags.out.Laird.sex.2vars.mix <- jags.Laird.growth(jags.data = jags.data.growth.sex,
+                                                  MCMC.params = MCMC.params.2,
+                                                  out.filename = "RData/jags_out_Stenella_Laird_sex_2vars_mix.rds",
+                                                  jags.model = "models/model_two_phase_Laird_sex_2vars_mix.jags",
+                                                  jags.params = c("L0", "a1", "alpha1", "a2", "tc",
+                                                                  "s_a1", "s_a2", "s_alpha1", "s_tc",  
+                                                                  "s_juv", "s_adult", "z_aux", "p_coastal",
+                                                                  "loglik"),
+                                                  inits.fcn = generate_inits_mix_sex)
+
 
 
 # 
