@@ -1,0 +1,94 @@
+
+
+model {
+  # ===========================================================
+  # GROWTH SUB-MODEL (Mixture + Sexual Dimorphism)
+  # ===========================================================
+  for (i in 1:N_growth) {
+    # Phase 1: Juvenile growth curve (Shared by sex and form)
+    mu1[i] <- L0[sp_growth[i]] * exp((a1[sp_growth[i]] / alpha1[sp_growth[i]]) * (1 - exp(-alpha1[sp_growth[i]] * age_growth[i])))
+    
+    # Calculate Length at Changepoint (Lc)
+    Lc[i] <- L0[sp_growth[i]] * exp((a1[sp_growth[i]] / alpha1[sp_growth[i]]) * (1 - exp(-alpha1[sp_growth[i]] * tc[sp_growth[i]])))
+    
+    # --- MIXTURE ASSIGNMENT ---
+    is_attenuata[i] <- equals(sp_growth[i], 1)
+    p_coastal_eff[i] <- p_coastal * is_attenuata[i]
+    z_aux[i] ~ dbern(p_coastal_eff[i])
+    form[i] <- z_aux[i] + 1  # 1 = Offshore/Other, 2 = Coastal
+    
+    # --- REPARAMETERIZED PHASE 2 ---
+    # Retrieve sex-specific L_inf! (sex_growth is 1 for F, 2 for M)
+    L_inf_i[i] <- L_inf[sp_growth[i], form[i], sex_growth[i]]
+    a2_i[i] <- a2[sp_growth[i], form[i]]
+    
+    # Calculate alpha2 deterministically
+    alpha2_i[i] <- a2_i[i] / (log(L_inf_i[i]) - log(Lc[i]))
+    
+    # Phase 2: Adult growth curve
+    mu2[i] <- Lc[i] * exp((a2_i[i] / alpha2_i[i]) * (1 - exp(-alpha2_i[i] * (age_growth[i] - tc[sp_growth[i]]))))
+    
+    # Switch for Phase 1 vs Phase 2
+    is_phase2[i] <- step(age_growth[i] - tc[sp_growth[i]])
+    mu[i] <- (1 - is_phase2[i]) * mu1[i] + is_phase2[i] * mu2[i]
+    
+    # Phase-specific precision
+    tau_i[i] <- (1 - is_phase2[i]) * tau_juv + is_phase2[i] * tau_adult
+    
+    # Likelihood
+    length_growth[i] ~ dnorm(mu[i], tau_i[i])
+    loglik[i] <- logdensity.norm(length_growth[i], mu[i], tau_i[i])
+  }
+
+  # ===========================================================
+  # PRIORS
+  # ===========================================================
+  for (s in 1:N_species) {
+    L0[s] ~ dnorm(mu_L0_data[s], tau_L0_data[s]) T(0, )
+    a1[s] ~ dlnorm(mu_a1, tau_a1)
+    alpha1[s] ~ dlnorm(mu_alpha1, tau_alpha1)
+    tc[s] ~ dnorm(mu_tc, tau_tc) T(0, )
+    
+    # Shared growth rate for Form 1
+    a2[s, 1] ~ dlnorm(mu_a2, tau_a2)
+  }
+
+  # --- S. ATTENUATA MIXTURE & SEX PRIORS ---
+  p_coastal ~ dunif(0, 1)
+  
+  # Form 1 (Offshore): Females average 10 cm smaller 
+  L_inf[1, 1, 1] ~ dnorm(190, 0.01) T(160, 220) # Female
+  L_inf[1, 1, 2] ~ dnorm(200, 0.01) T(170, 230) # Male
+  
+  # Form 2 (Coastal): Scaled up based on your bounds
+  L_inf[1, 2, 1] ~ dnorm(220, 0.01) T(190, 250) # Female
+  L_inf[1, 2, 2] ~ dnorm(230, 0.01) T(200, 260) # Male
+  
+  a2[1, 2] ~ dlnorm(mu_a2, tau_a2)
+  
+  # --- OTHER SPECIES DEFAULT PRIORS ---
+  for (s in 2:N_species) {
+    for (x in 1:N_sexes) {
+      L_inf[s, 1, x] ~ dnorm(200, 0.001) T(150, 300)
+      L_inf[s, 2, x] ~ dnorm(200, 0.001) # Dummy
+    }
+  }
+  a2[2, 2] ~ dlnorm(0, 1)
+  a2[3, 2] ~ dlnorm(0, 1)
+
+  # Global Priors
+  mu_a1 ~ dnorm(0, 0.001)
+  tau_a1 ~ dgamma(0.01, 0.01)
+  mu_alpha1 ~ dnorm(0, 0.001)
+  tau_alpha1 ~ dgamma(0.01, 0.01)
+  mu_a2 ~ dnorm(0, 0.001)
+  tau_a2 ~ dgamma(0.01, 0.01)
+  mu_tc ~ dnorm(6, 0.01) T(0, )
+  tau_tc ~ dgamma(0.01, 0.01)
+
+  # Residual precision
+  tau_juv ~ dgamma(0.01, 0.01)
+  tau_adult ~ dgamma(0.01, 0.01)
+  s_juv <- 1 / sqrt(tau_juv)
+  s_adult <- 1 / sqrt(tau_adult)
+}

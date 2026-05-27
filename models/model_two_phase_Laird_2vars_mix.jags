@@ -1,0 +1,100 @@
+# JAGS Model for Hierarchical Two-Phase Laird Growth Curve
+# Using prenatal and postnatal data to estimate L0 at the same time
+# Provided by Gemini Coding Partner
+
+
+model {
+  # ===========================================================
+  # GROWTH SUB-MODEL (With Asymptotic Mixture)
+  # ===========================================================
+  for (i in 1:N_growth) {
+    # Phase 1: Juvenile growth curve
+    mu1[i] <- L0[sp_growth[i]] * exp((a1[sp_growth[i]] / alpha1[sp_growth[i]]) * (1 - exp(-alpha1[sp_growth[i]] * age_growth[i])))
+    
+    # Calculate Length at Changepoint (Lc)
+    Lc[i] <- L0[sp_growth[i]] * exp((a1[sp_growth[i]] / alpha1[sp_growth[i]]) * (1 - exp(-alpha1[sp_growth[i]] * tc[sp_growth[i]])))
+    
+    # --- MIXTURE ASSIGNMENT ---
+    # Check if the individual is S. attenuata (Species 1)
+    is_attenuata[i] <- equals(sp_growth[i], 1)
+    
+    # Probability is 'p_coastal' if attenuata, otherwise 0
+    p_coastal_eff[i] <- p_coastal * is_attenuata[i]
+    
+    # Assign latent class: z_aux is 0 (Offshore/Other) or 1 (Coastal)
+    z_aux[i] ~ dbern(p_coastal_eff[i])
+    form[i] <- z_aux[i] + 1  # Shifts to 1 or 2 for indexing
+    
+    # --- REPARAMETERIZED PHASE 2 ---
+    # Retrieve the correct L_inf and a2 based on species and assigned form
+    L_inf_i[i] <- L_inf[sp_growth[i], form[i]]
+    a2_i[i] <- a2[sp_growth[i], form[i]]
+    
+    # Calculate alpha2 deterministically using your algebraic substitution!
+    alpha2_i[i] <- a2_i[i] / (log(L_inf_i[i]) - log(Lc[i]))
+    
+    # Phase 2: Adult growth curve
+    mu2[i] <- Lc[i] * exp((a2_i[i] / alpha2_i[i]) * (1 - exp(-alpha2_i[i] * (age_growth[i] - tc[sp_growth[i]]))))
+    
+    # Switch for Phase 1 vs Phase 2
+    is_phase2[i] <- step(age_growth[i] - tc[sp_growth[i]])
+    mu[i] <- (1 - is_phase2[i]) * mu1[i] + is_phase2[i] * mu2[i]
+    
+    # Phase-specific precision
+    tau_i[i] <- (1 - is_phase2[i]) * tau_juv + is_phase2[i] * tau_adult
+    
+    # Likelihood
+    length_growth[i] ~ dnorm(mu[i], tau_i[i])
+    loglik[i] <- logdensity.norm(length_growth[i], mu[i], tau_i[i])
+  }
+
+  # ===========================================================
+  # PRIORS
+  # ===========================================================
+  for (s in 1:N_species) {
+    L0[s] ~ dnorm(mu_L0_data[s], tau_L0_data[s]) T(0, )
+    a1[s] ~ dlnorm(mu_a1, tau_a1)
+    alpha1[s] ~ dlnorm(mu_alpha1, tau_alpha1)
+    tc[s] ~ dnorm(mu_tc, tau_tc) T(0, )
+    
+    # Default Form 1 growth rate for all species
+    a2[s, 1] ~ dlnorm(mu_a2, tau_a2)
+  }
+
+  # --- S. ATTENUATA MIXTURE PRIORS ---
+  # Proportion of the attenuata population that is coastal
+  p_coastal ~ dunif(0, 1)
+  
+  # Strictly bounded asymptotic lengths based on your data!
+  L_inf[1, 1] ~ dnorm(200, 0.01) T(170, 230) # Offshore
+  L_inf[1, 2] ~ dnorm(230, 0.01) T(200, 260) # Coastal
+  
+  # Coastal growth rate for S. attenuata
+  a2[1, 2] ~ dlnorm(mu_a2, tau_a2)
+  
+  # --- OTHER SPECIES DEFAULT PRIORS ---
+  L_inf[2, 1] ~ dnorm(200, 0.001) T(150, 300)
+  L_inf[3, 1] ~ dnorm(200, 0.001) T(150, 300)
+  
+  # Dummy priors for unused matrix slots to keep JAGS compiler happy
+  L_inf[2, 2] ~ dnorm(200, 0.001)
+  L_inf[3, 2] ~ dnorm(200, 0.001)
+  a2[2, 2] ~ dlnorm(0, 1)
+  a2[3, 2] ~ dlnorm(0, 1)
+
+  # Global Priors
+  mu_a1 ~ dnorm(0, 0.001)
+  tau_a1 ~ dgamma(0.01, 0.01)
+  mu_alpha1 ~ dnorm(0, 0.001)
+  tau_alpha1 ~ dgamma(0.01, 0.01)
+  mu_a2 ~ dnorm(0, 0.001)
+  tau_a2 ~ dgamma(0.01, 0.01)
+  mu_tc ~ dnorm(6, 0.01) T(0, )
+  tau_tc ~ dgamma(0.01, 0.01)
+
+  # Residual precision
+  tau_juv ~ dgamma(0.01, 0.01)
+  tau_adult ~ dgamma(0.01, 0.01)
+  s_juv <- 1 / sqrt(tau_juv)
+  s_adult <- 1 / sqrt(tau_adult)
+}
