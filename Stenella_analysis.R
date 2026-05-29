@@ -38,7 +38,7 @@ tables.$Morph.2 %>%
   filter(Genus.f == "Stenella") %>%
   mutate(Species.f = as.factor(Species)) %>% 
   left_join(tables.$Animal %>%
-               select(Specimen, Sex), by = "Specimen") -> table.Morph.2.Stenella
+              select(Specimen, Sex), by = "Specimen") -> table.Morph.2.Stenella
 
 # simple age-sexual maturity logistic regression:
 table.Morph.2.Stenella %>%

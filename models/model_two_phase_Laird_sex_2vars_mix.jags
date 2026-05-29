@@ -22,8 +22,12 @@ model {
     L_inf_i[i] <- L_inf[sp_growth[i], form[i], sex_growth[i]]
     a2_i[i] <- a2[sp_growth[i], form[i]]
     
+	# Prevents division by zero or negative alphas if Lc > L_inf during MCMC exploration
+    denom[i] <- max(log(L_inf_i[i]) - log(Lc[i]), 0.001)
+    alpha2_i[i] <- a2_i[i] / denom[i]
+	
     # Calculate alpha2 deterministically
-    alpha2_i[i] <- a2_i[i] / (log(L_inf_i[i]) - log(Lc[i]))
+    #alpha2_i[i] <- a2_i[i] / (log(L_inf_i[i]) - log(Lc[i]))
     
     # Phase 2: Adult growth curve
     mu2[i] <- Lc[i] * exp((a2_i[i] / alpha2_i[i]) * (1 - exp(-alpha2_i[i] * (age_growth[i] - tc[sp_growth[i]]))))
@@ -77,18 +81,30 @@ model {
   a2[3, 2] ~ dlnorm(0, 1)
 
   # Global Priors
+  # Tighter hyper-priors prevent wild hierarchical proposals
+  tau_a1 ~ dgamma(1, 1)
+  tau_alpha1 ~ dgamma(1, 1)
+  tau_a2 ~ dgamma(1, 1)
+  tau_tc ~ dgamma(1, 1)
   mu_a1 ~ dnorm(0, 0.001)
-  tau_a1 ~ dgamma(0.01, 0.01)
+  #tau_a1 ~ dgamma(0.01, 0.01)
   mu_alpha1 ~ dnorm(0, 0.001)
-  tau_alpha1 ~ dgamma(0.01, 0.01)
+  #tau_alpha1 ~ dgamma(0.01, 0.01)
   mu_a2 ~ dnorm(0, 0.001)
-  tau_a2 ~ dgamma(0.01, 0.01)
+  #tau_a2 ~ dgamma(0.01, 0.01)
   mu_tc ~ dnorm(6, 0.01) T(0, )
-  tau_tc ~ dgamma(0.01, 0.01)
+  #tau_tc ~ dgamma(0.01, 0.01)
 
   # Residual precision
-  tau_juv ~ dgamma(0.01, 0.01)
-  tau_adult ~ dgamma(0.01, 0.01)
-  s_juv <- 1 / sqrt(tau_juv)
-  s_adult <- 1 / sqrt(tau_adult)
+  # Instead of wide gammas on tau, we use bounded uniforms on standard deviation
+  s_juv ~ dunif(0, 30)
+  tau_juv <- 1 / (s_juv * s_juv)
+  
+  s_adult ~ dunif(0, 50)
+  tau_adult <- 1 / (s_adult * s_adult)
+  
+  #tau_juv ~ dgamma(0.01, 0.01)
+  #tau_adult ~ dgamma(0.01, 0.01)
+  #s_juv <- 1 / sqrt(tau_juv)
+  #s_adult <- 1 / sqrt(tau_adult)
 }
