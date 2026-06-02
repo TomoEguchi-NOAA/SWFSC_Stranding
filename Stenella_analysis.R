@@ -11,6 +11,8 @@ library(jagsUI)
 library(rstanarm)
 library(posterior)
 library(bayesplot)
+library(sf)
+library(rnaturalearth)
 
 source("SWFSC_Stranding_fcns.R")
 options(mc.cores = parallel::detectCores())
@@ -38,7 +40,39 @@ tables.$Morph.2 %>%
   filter(Genus.f == "Stenella") %>%
   mutate(Species.f = as.factor(Species)) %>% 
   left_join(tables.$Animal %>%
-              select(Specimen, Sex), by = "Specimen") -> table.Morph.2.Stenella
+              select(Specimen, Sex), by = "Specimen") -> table.Morph.2.Stenella.1
+
+# remove a couple of "outliers," which are probably data entry errors:
+table.Morph.2.Stenella.1 %>% 
+  filter(Longitude < -78) -> table.Morph.2.Stenella.2
+
+
+# 1. Convert your dataframe into a spatial 'sf' object
+# Replace 'porpoise_data' with your actual dataframe name, 
+# and ensure 'lon' and 'lat' match your column names.
+# CRS 4326 is the standard coordinate reference system for GPS lat/lon.
+points_sf <- st_as_sf(table.Morph.2.Stenella.2, 
+                      coords = c("Longitude", "Latitude"), crs = 4326)
+
+# 2. Download the high-resolution global coastline
+# We use scale = "large" for the most accurate coastal boundaries
+coastline <- ne_coastline(scale = "large", returnclass = "sf")
+
+# 3. Check which points are within 25 km (25,000 meters) of the coast
+# Because the CRS is 4326, the 'sf' package uses spherical geometry (s2) 
+# and automatically calculates the distance in meters.
+within_25km <- st_is_within_distance(points_sf, coastline, dist = 25000)
+
+# 4. Create your binary covariate
+# 'within_25km' returns a list. If a point touches the coast, its list length is > 0.
+table.Morph.2.Stenella.2$is_coastal <- ifelse(lengths(within_25km) > 0, 1, 0)
+
+# View how many dolphins were flagged as coastal!
+table(table.Morph.2.Stenella.2$is_coastal)
+
+# Remove coastal (only 58 data points)
+table.Morph.2.Stenella.2 %>%
+  filter(is_coastal == 0) -> table.Morph.2.Stenella
 
 # simple age-sexual maturity logistic regression:
 table.Morph.2.Stenella %>%
@@ -404,85 +438,89 @@ jags.out.Laird.2sex.2vars <- jags.Laird.growth(jags.data = jags.data.growth.sex,
                                                                "s_tc", "s_juv", "s_adult", "loglik"),
                                                inits.fcn = generate_inits_sex_2vars)
 
+
+
+## Mixture models with offshore-coastal separation have been removed
+
 #Test MCMC setup for debugging
-MCMC.params.2 <- list(n.samples = 1200,
-                      n.thin = 2,
-                      n.burnin = 800,
-                      n.chains = 5)
-
-generate_inits_mixture <- function() {
-  list(
-    L0 = mu_L0_est, 
-    
-    mu_tc = runif(1, min = 5, max = 7),
-    tc = runif(3, min = 5, max = 7),
-    
-    mu_a1 = rnorm(1, mean = 0, sd = 0.1), 
-    tau_a1 = runif(1, 0.5, 1.5), 
-    a1 = runif(3, min = 0.1, max = 0.5),
-    
-    mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), 
-    tau_alpha1 = runif(1, 0.5, 1.5), 
-    alpha1 = runif(3, min = 0.1, max = 0.5),
-    
-    mu_a2 = rnorm(1, mean = 0, sd = 0.1), 
-    tau_a2 = runif(1, 0.5, 1.5), 
-    a2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
-    
-    # Initialize L_inf inside our bounded constraints
-    L_inf = matrix(c(200, 200, 200, 230, 200, 200), nrow = 3, ncol = 2),
-    
-    p_coastal = runif(1, 0.1, 0.9),
-    
-    tau_juv = runif(1, min = 1.0, max = 3.0),   
-    tau_adult = runif(1, min = 0.1, max = 0.5)  
-  )
-}
-
-jags.out.Laird.2vars.mix <- jags.Laird.growth(jags.data = jags.data.growth.sex,
-                                               MCMC.params = MCMC.params.2,
-                                               out.filename = "RData/jags_out_Stenella_Laird_2vars_mix.rds",
-                                               jags.model = "models/model_two_phase_Laird_2vars_mix.jags",
-                                               jags.params = c("L0", "a1", "alpha1", "a2", "tc",
-                                                               "s_a1", "s_a2", "s_alpha1", "s_tc",  
-                                                               "s_juv", "s_adult", "z_aux", "p_coastal",
-                                                               "loglik"),
-                                               inits.fcn = generate_inits_mixture)
-
-
-generate_inits_mix_sex <- function() {
-  # Build a 3D array for L_inf starting values
-  L_inf_start <- array(200, dim = c(3, 2, 2))
-  
-  # Give S. attenuata sensible starts based on our bounds
-  L_inf_start[1, 1, 1] <- 190  # Offshore Female
-  L_inf_start[1, 1, 2] <- 200  # Offshore Male
-  L_inf_start[1, 2, 1] <- 220  # Coastal Female
-  L_inf_start[1, 2, 2] <- 230  # Coastal Male
-  
-  list(
-    L0 = mu_L0_est, 
-    tc = runif(3, min = 5, max = 7),
-    a1 = runif(3, min = 0.1, max = 0.5),
-    alpha1 = runif(3, min = 0.1, max = 0.5),
-    a2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
-    L_inf = L_inf_start,
-    p_coastal = runif(1, 0.1, 0.9),
-    tau_juv = runif(1, min = 1.0, max = 3.0),   
-    tau_adult = runif(1, min = 0.1, max = 0.5)  
-  )
-}
-
-jags.out.Laird.sex.2vars.mix <- jags.Laird.growth(jags.data = jags.data.growth.sex,
-                                                  MCMC.params = MCMC.params.2,
-                                                  out.filename = "RData/jags_out_Stenella_Laird_sex_2vars_mix.rds",
-                                                  jags.model = "models/model_two_phase_Laird_sex_2vars_mix.jags",
-                                                  jags.params = c("L0", "a1", "alpha1", "a2", "tc",
-                                                                  "s_a1", "s_a2", "s_alpha1", "s_tc",  
-                                                                  "s_juv", "s_adult", "z_aux", "p_coastal",
-                                                                  "loglik"),
-                                                  inits.fcn = generate_inits_mix_sex)
-
+# MCMC.params.2 <- list(n.samples = 1200,
+#                       n.thin = 2,
+#                       n.burnin = 800,
+#                       n.chains = 5)
+# 
+# generate_inits_mixture <- function() {
+#   list(
+#     L0 = mu_L0_est, 
+#     
+#     mu_tc = runif(1, min = 5, max = 7),
+#     tc = runif(3, min = 5, max = 7),
+#     
+#     mu_a1 = rnorm(1, mean = 0, sd = 0.1), 
+#     tau_a1 = runif(1, 0.5, 1.5), 
+#     a1 = runif(3, min = 0.1, max = 0.5),
+#     
+#     mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), 
+#     tau_alpha1 = runif(1, 0.5, 1.5), 
+#     alpha1 = runif(3, min = 0.1, max = 0.5),
+#     
+#     mu_a2 = rnorm(1, mean = 0, sd = 0.1), 
+#     tau_a2 = runif(1, 0.5, 1.5), 
+#     a2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+#     
+#     # Initialize L_inf inside our bounded constraints
+#     L_inf = matrix(c(200, 200, 200, 230, 200, 200), nrow = 3, ncol = 2),
+#     
+#     p_coastal = runif(1, 0.1, 0.9),
+#     
+#     s_juv = runif(1, min = 1.0, max = 3.0),   
+#     s_adult = runif(1, min = 0.1, max = 0.5)  
+#   )
+# }
+# 
+# jags.out.Laird.2vars.mix <- jags.Laird.growth(jags.data = jags.data.growth.sex,
+#                                                MCMC.params = MCMC.params.2,
+#                                                out.filename = "RData/jags_out_Stenella_Laird_2vars_mix.rds",
+#                                                jags.model = "models/model_two_phase_Laird_2vars_mix.jags",
+#                                                jags.params = c("L0", "a1", "alpha1", "a2", "tc",
+#                                                                "s_a1", "s_a2", "s_alpha1", "s_tc",  
+#                                                                "s_juv", "s_adult", "z_aux", "p_coastal",
+#                                                                "loglik"),
+#                                                inits.fcn = generate_inits_mixture)
+# 
+# 
+# generate_inits_mix_sex <- function() {
+#   # Build a 3D array for L_inf starting values
+#   L_inf_start <- array(200, dim = c(3, 2, 2))
+#   
+#   # Give S. attenuata sensible starts based on our bounds
+#   L_inf_start[1, 1, 1] <- 190  # Offshore Female
+#   L_inf_start[1, 1, 2] <- 200  # Offshore Male
+#   L_inf_start[1, 2, 1] <- 220  # Coastal Female
+#   L_inf_start[1, 2, 2] <- 230  # Coastal Male
+#   
+#   list(
+#     L0 = mu_L0_est, 
+#     tc = runif(3, min = 5, max = 7),
+#     a1 = runif(3, min = 0.1, max = 0.5),
+#     alpha1 = runif(3, min = 0.1, max = 0.5),
+#     a2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+#     L_inf = L_inf_start,
+#     p_coastal = runif(1, 0.1, 0.9),
+#     s_juv = runif(1, min = 1.0, max = 3.0),   
+#     s_adult = runif(1, min = 0.1, max = 0.5)  
+#   )
+# }
+# 
+# jags.out.Laird.sex.2vars.mix <- jags.Laird.growth(jags.data = jags.data.growth.sex,
+#                                                   MCMC.params = MCMC.params.2,
+#                                                   out.filename = "RData/jags_out_Stenella_Laird_sex_2vars_mix.rds",
+#                                                   jags.model = "models/model_two_phase_Laird_sex_2vars_mix.jags",
+#                                                   jags.params = c("L0", "a1", "alpha1", "a2", "tc",
+#                                                                   "s_a1", "s_a2", "s_alpha1", "s_tc",  
+#                                                                   "s_juv", "s_adult", "z_aux", "p_coastal",
+#                                                                   "loglik"),
+#                                                   inits.fcn = generate_inits_mix_sex)
+# 
 
 
 # 
