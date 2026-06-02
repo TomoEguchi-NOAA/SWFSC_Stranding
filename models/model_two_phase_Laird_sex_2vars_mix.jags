@@ -72,7 +72,7 @@ model {
   
   # --- OTHER SPECIES DEFAULT PRIORS ---
   for (s in 2:N_species) {
-    for (x in 1:N_sexes) {
+    for (x in 1:N_sex) {
       L_inf[s, 1, x] ~ dnorm(200, 0.001) T(150, 300)
       L_inf[s, 2, x] ~ dnorm(200, 0.001) # Dummy
     }
