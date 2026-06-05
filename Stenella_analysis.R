@@ -302,50 +302,85 @@ jags.out.Laird <- jags.Laird.growth(jags.data = jags.data.growth,
 
 ## Add sex as another factor with additional parameters:
 
-# 1. Create a function to generate sensible starting values
 generate_inits_sex <- function() {
   list(
-    # Logistic parameters
-    mu_L0 = runif(1, min = 80, max = 85),
-    L0 = runif(3, min = 80, max = 85),
-    mu_B1 = runif(1, min = 0.05, max = 0.15),
-    B1 = runif(3, min = 0.05, max = 0.15),
+    L0 = mu_L0_est, 
     
-    # Phase 1 parameters (Vectors of length 3)
-    mu_tc = runif(1, min = 5, max = 7),
-    tc = runif(3, min = 5, max = 7),
-    mu_a1 = rnorm(1, mean = 0, sd = 0.1), 
-    tau_a1 = runif(1, 0.5, 1.5), 
-    a1 = runif(3, min = 0.1, max = 0.5),
-    mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), 
-    tau_alpha1 = runif(1, 0.5, 1.5), 
-    alpha1 = runif(3, min = 0.1, max = 0.5),
+    tc = matrix(runif(6, min = 5, max = 7),
+                nrow = 3, ncol = 2),
     
-    # Phase 2 parameters (Matrices: 3 rows for species, 2 columns for sex)
-    mu_a2 = rnorm(2, mean = 0, sd = 0.1), 
-    tau_a2 = runif(1, 0.5, 1.5), 
-    a2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+    mu_tc = runif(2, min = 5, max = 7),
     
-    mu_alpha2 = rnorm(2, mean = 0, sd = 0.1), 
-    tau_alpha2 = runif(1, 0.5, 1.5), 
-    alpha2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+    a1 = matrix(runif(3, min = 0.1, max = 0.5),
+                nrow = 3, ncol = 2),
+    alpha1 = matrix(runif(3, min = 0.1, max = 0.5),
+                    nrow = 3, ncol = 2),
     
-    # Variance
+    mu_a2 = matrix(runif(6, min = -0.5, max = 0.5), 
+                nrow = 3, ncol = 2),
+    
+    # Initialize L_inf around the 200cm mark
+    L_inf = matrix(runif(6, min = 190, max = 210), 
+                   nrow = 3, ncol = 2),
+    
     tau = runif(1, min = 0.5, max = 2.0)
   )
 }
 
+# Create the list of lists for 5 chains
+# my_inits_Linf <- lapply(1:5, function(i) generate_inits_1var_2sex())
+# 
+# # Parameters to monitor
+# params_to_monitor_Linf <- c("L0", "a1", "alpha1", "a2", "L_inf", "tc", "sigma", "loglik")
+
+
+# 1. Create a function to generate sensible starting values
+# generate_inits_sex <- function() {
+#   list(
+#     # Logistic parameters
+#     mu_L0 = runif(1, min = 80, max = 85),
+#     L0 = runif(3, min = 80, max = 85),
+#     mu_B1 = runif(1, min = 0.05, max = 0.15),
+#     B1 = runif(3, min = 0.05, max = 0.15),
+#     
+#     # Phase 1 parameters (Vectors of length 3)
+#     mu_tc = runif(1, min = 5, max = 7),
+#     tc = runif(3, min = 5, max = 7),
+#     mu_a1 = rnorm(1, mean = 0, sd = 0.1), 
+#     tau_a1 = runif(1, 0.5, 1.5), 
+#     a1 = runif(3, min = 0.1, max = 0.5),
+#     mu_alpha1 = rnorm(1, mean = 0, sd = 0.1), 
+#     tau_alpha1 = runif(1, 0.5, 1.5), 
+#     alpha1 = runif(3, min = 0.1, max = 0.5),
+#     
+#     # Phase 2 parameters (Matrices: 3 rows for species, 2 columns for sex)
+#     mu_a2 = rnorm(2, mean = 0, sd = 0.1), 
+#     tau_a2 = runif(1, 0.5, 1.5), 
+#     a2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+#     
+#     mu_alpha2 = rnorm(2, mean = 0, sd = 0.1), 
+#     tau_alpha2 = runif(1, 0.5, 1.5), 
+#     alpha2 = matrix(runif(6, min = 0.1, max = 0.5), nrow = 3, ncol = 2),
+#     
+#     # Variance
+#     tau = runif(1, min = 0.5, max = 2.0)
+#   )
+# }
+
 jags.data.growth.sex <- jags.data.growth
 jags.data.growth.sex$sex_growth <- Length.at.Age.data$Sex_idx
 jags.data.growth.sex$N_sex <- max(Length.at.Age.data$Sex_idx)
+jags.data.growth.sex$has_phase2 = c(1, 0, 1)  # Sp1 = Yes, Sp2 = No, Sp3 = Yes
 
 jags.out.Laird.sex <- jags.Laird.growth(jags.data = jags.data.growth.sex,
                                         MCMC.params = MCMC.params.2,
-                                        out.filename = "RData/jags_out_Stenella_Laird_sex.rds",
-                                        jags.model = "models/model_two_phase_Laird_sex.jags",
-                                        jags.params = c("L0", "a1", "alpha1", "a2", "alpha2", "tc",
+                                        out.filename = "RData/jags_out_Stenella_Laird_sex_Linf.rds",
+                                        jags.model = "models/model_two_phase_Laird_sex_Linf.jags",
+                                        jags.params = c("L0", "Lc", "a1", "alpha1", "a2", "alpha2", "tc",
                                                         "s_a1", "s_a2", "s_alpha1", "s_alpha2",
-                                                        "s_tc", "sigma", "loglik"),
+                                                        "s_tc", "sigma", "L_inf", "s_L_inf",
+                                                        "mu_a1", "mu_tc", "mu_alpha1", "mu_a2", 
+                                                        "loglik"),
                                         inits.fcn = generate_inits_sex)
 
 #Test MCMC setup for debugging
@@ -353,6 +388,51 @@ jags.out.Laird.sex <- jags.Laird.growth(jags.data = jags.data.growth.sex,
 #                       n.thin = 2,
 #                       n.burnin = 800,
 #                       n.chains = 5)
+
+
+generate_inits_sex_scaled <- function() {
+  list(
+    L0 = mu_L0_est, 
+    
+    tc = matrix(runif(6, min = 0.5, max = 0.7),
+                nrow = 3, ncol = 2),
+    
+    mu_tc = runif(2, min = 0.5, max = 0.7),
+    
+    a1 = matrix(runif(3, min = 0.1, max = 0.5),
+                nrow = 3, ncol = 2),
+    alpha1 = matrix(runif(3, min = 0.1, max = 0.5),
+                    nrow = 3, ncol = 2),
+    
+    mu_a2 = matrix(runif(6, min = -0.5, max = 0.5), 
+                   nrow = 3, ncol = 2),
+    
+    # Initialize L_inf around the 200cm mark
+    L_inf = matrix(runif(6, min = 190, max = 210), 
+                   nrow = 3, ncol = 2),
+    
+    tau = runif(1, min = 0.5, max = 2.0)
+  )
+}
+
+
+## Scaled age growth model
+jags.data.growth.sex$age_scaled <- jags.data.growth.sex$age_growth/10
+
+jags.out.Laird.sex <- jags.Laird.growth(jags.data = jags.data.growth.sex,
+                                        MCMC.params = MCMC.params.2,
+                                        out.filename = "RData/jags_out_Stenella_Laird_sex_Linf_scaled.rds",
+                                        jags.model = "models/model_two_phase_Laird_sex_Linf_scaled.jags",
+                                        jags.params = c("L0", "Lc", "a1", "alpha1", "a2", "alpha2", "tc",
+                                                        "s_a1", "s_a2", "s_alpha1", "s_alpha2",
+                                                        "s_tc", "sigma", "L_inf", "s_L_inf",
+                                                        "mu_a1", "mu_tc", "mu_alpha1", "mu_a2", 
+                                                        "loglik"),
+                                        inits.fcn = generate_inits_sex_scaled)
+
+
+
+
 
 generate_inits_1sex_2vars <- function() {
   list(

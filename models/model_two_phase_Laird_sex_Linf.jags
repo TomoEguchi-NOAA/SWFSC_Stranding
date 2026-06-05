@@ -1,0 +1,112 @@
+# JAGS Model for Hierarchical Two-Phase Laird Growth Curve
+# Using prenatal and postnatal data to estimate L0 at the same time
+# Provided by Gemini Coding Partner
+
+model {
+  # ===========================================================
+  # SPECIES & SEX LEVEL CALCULATIONS (Optimized for Speed)
+  # ===========================================================
+  
+  # ===========================================================
+  # SPECIES & SEX LEVEL CALCULATIONS
+  # ===========================================================
+  for (s in 1:N_species) {
+    for (x in 1:N_sex) {
+      # Calculate a sex-specific Length at Changepoint (Lc)
+      Lc[s, x] <- L0[s] * exp((a1[s, x] / alpha1[s, x]) * (1 - exp(-alpha1[s, x] * tc[s, x])))
+      
+      # SAFETY NET: Prevent division by zero
+      denom[s, x] <- max(log(L_inf[s, x]) - log(Lc[s, x]), 0.001)
+      alpha2[s, x] <- a2[s, x] / denom[s, x]
+    }
+  }
+  
+
+  # ===========================================================
+  # OBSERVATION MODEL
+  # ===========================================================
+  for (i in 1:N_growth) {
+    # Phase 1: Juvenile growth curve
+    mu1[i] <- L0[sp_growth[i]] * exp((a1[sp_growth[i], sex_growth[i]] / alpha1[sp_growth[i], sex_growth[i]]) * (1 - exp(-alpha1[sp_growth[i], sex_growth[i]] * age_growth[i])))
+    
+    # Phase 2: Adult growth curve (using the pre-calculated Lc and alpha2!)
+    mu2[i] <- Lc[sp_growth[i], sex_growth[i]] * exp((a2[sp_growth[i], sex_growth[i]] / alpha2[sp_growth[i], sex_growth[i]]) * (1 - exp(-alpha2[sp_growth[i], sex_growth[i]] * (age_growth[i] - tc[sp_growth[i], sex_growth[i]]))))
+    
+    # Switch for Phase 1 vs Phase 2
+	# Switch for Phase 1 vs Phase 2 (only matters if has_phase2 == 1)
+    is_phase2[i] <- step(age_growth[i] - tc[sp_growth[i], sex_growth[i]])
+    
+    # The two-phase prediction
+    mu_two_phase[i] <- (1 - is_phase2[i]) * mu1[i] + is_phase2[i] * mu2[i]
+    
+    # THE HARD SWITCH: 
+    # If has_phase2 is 0, it just uses mu1. If 1, it uses the two-phase curve.
+    mu[i] <- (1 - has_phase2[sp_growth[i]]) * mu1[i] + has_phase2[sp_growth[i]] * mu_two_phase[i]
+	
+    is_phase2[i] <- step(age_growth[i] - tc[sp_growth[i], sex_growth[i]])
+    # Likelihood using the single, shared variance
+    length_growth[i] ~ dnorm(mu[i], tau)
+    
+    # Log-likelihood for Pareto-k / LOO-CV diagnostics
+    loglik[i] <- logdensity.norm(length_growth[i], mu[i], tau)
+  }
+
+  # ===========================================================
+  # PRIORS
+  # ===========================================================
+  for (s in 1:N_species) {
+    L0[s] ~ dnorm(mu_L0_data[s], tau_L0_data[s]) T(0, )
+        
+    for (x in 1:N_sex) {
+      a1[s, x]     ~ dlnorm(mu_a1[x], tau_a1)
+	  alpha1[s, x] ~ dlnorm(mu_alpha1[x], tau_alpha1)
+    }
+  }
+
+  # BIOLOGICAL PRIORS FOR SPECIES 1 AND 3 ONLY
+  for (s in c(1, 3)) {
+    for (x in 1:N_sexes) {
+      tc[s, x]     ~ dnorm(mu_tc[x], tau_tc) T(0, )
+      a2[s, x]     ~ dlnorm(mu_a2[s, x], tau_a2)
+      L_inf[s, x]  ~ dnorm(mu_L_inf[x], tau_L_inf) T(150, 260) 
+    }
+  }
+
+  # DUMMY PRIORS FOR SPECIES 2 (JAGS requires the matrix to be full)
+  for (x in 1:N_sexes) {
+    tc[2, x]    ~ dnorm(10, 1)      # Ignored by likelihood
+    a2[2, x]    ~ dlnorm(0, 1)      # Ignored by likelihood
+    L_inf[2, x] ~ dnorm(200, 0.001) # Ignored by likelihood
+  }
+
+  # Global Hyperparameters (Tighter gamma priors to aid mixing)
+  s_a1 ~ dunif(0, 30)  #<- 1/sqrt(tau_a1)
+  tau_a1 <- 1/(s_a1 * s_a1)  # dgamma(1, 1)
+  
+  tau_alpha1 <- 1/(s_alpha1 * s_alpha1)# ~ dgamma(1, 1)
+  s_alpha1 ~ dunif(0, 30)  # <- 1/sqrt(tau_alpha1)
+  
+  tau_tc <- 1/(s_tc * s_tc) #~ dgamma(1, 1)
+  s_tc ~ dunif(0, 30)  # <- 1/sqrt(tau_tc)
+  
+  for (x in 1:N_sex) {
+    mu_a1[x] ~ dnorm(0, 0.001)
+    mu_tc[x] ~ dnorm(6, 0.01) T(0, )
+    mu_alpha1[x] ~ dnorm(0, 0.001)
+    
+    mu_L_inf[x] ~ dnorm(200, 0.001) 
+	
+	for (s in 1:N_species){
+		mu_a2[s, x] ~ dnorm(0, 0.001)
+	}
+  }
+  tau_a2 <- 1/(s_a2 * s_a2) #~ dgamma(1, 1)
+  s_a2 ~ dunif(0, 30)  # <- 1/sqrt(tau_a2)
+  
+  tau_L_inf <- 1/(s_L_inf * s_L_inf) #~ dgamma(0.1, 0.1)
+  s_L_inf ~ dunif(0, 30)  # <- 1/sqrt(tau_L_inf)
+
+  # Single residual precision
+  tau ~ dgamma(0.01, 0.01)
+  sigma <- 1 / sqrt(tau)
+}
