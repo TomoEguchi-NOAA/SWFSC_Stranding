@@ -1,0 +1,16 @@
+
+
+model{
+	
+	for (k in 1:N.samples){
+		y[k] ~ dnorm(mu[k], tau)
+		
+		mu[k] <- beta0 + beta1 * x[k]
+	}
+	
+	beta0 ~ dnorm(0, 0.01)
+	beta1 ~ dnorm(0, 0.01)
+	
+	tau <- 1/(s*s)
+	s ~ dunif(0, 40)
+}
