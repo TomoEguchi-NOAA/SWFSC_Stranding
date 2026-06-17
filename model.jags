@@ -1,1 +1,28 @@
-model file
+#model file
+
+
+model {
+	for (i in 1:N) {
+		# Likelihood
+		y[i] ~ dbern(p[i])
+    
+		# Reparameterized linear predictor!
+		# X[i] is length, and L0 is directly the 50% maturity length.
+		logit(p[i]) <- slope[species_idx[i]] * (X[i] - L0[species_idx[i]])
+	}
+ 
+	# Hierarchical Priors for Species-level Effects
+	for (j in 1:n.sp) {
+		# We draw L0 and the slope independently.
+		# T(0, ) forces JAGS to only try positive numbers, preventing crashes!
+		L0[j] ~ dnorm(mu_L0, tau_L0) T(0, )
+		slope[j] ~ dnorm(mu_slope, tau_slope) T(0, ) 
+	}
+  
+	# Global Priors (Hyperpriors)
+	mu_L0 ~ dnorm(82.5, 0.001) T(0, )
+	tau_L0 ~ dgamma(0.01, 0.01)
+
+	mu_slope ~ dnorm(0, 0.001) T(0, )
+	tau_slope ~ dgamma(0.01, 0.01)
+}
