@@ -14,6 +14,16 @@ library(bayesplot)
 library(sf)
 library(rnaturalearth)
 
+# With a new version of R installed, the following lines need to be run to
+# install necessary packages.
+# remotes::install_github("ropensci/rnaturalearthhires")
+# 
+# install.packages(
+#   "rnaturalearthhires",
+#   repos = "https://ropensci.r-universe.dev",
+#   type = "source"
+# )
+
 source("SWFSC_Stranding_fcns.R")
 options(mc.cores = parallel::detectCores())
 
@@ -291,14 +301,21 @@ jags.data.growth <- list(
 # inits_list_growth <- lapply(1:MCMC.params.2$n.chains, 
 #                                function(i) generate_inits_growth())
 
-jags.out.Laird <- jags.Laird.growth(jags.data = jags.data.growth,
-                                    MCMC.params = MCMC.params.2,
-                                    out.filename = "RData/jags_out_Stenella_Laird.rds",
-                                    jags.model = "models/model_two_phase_Laird.jags",
-                                    jags.params = c("L0", "a1", "alpha1", "a2", "alpha2", "tc",
-                                                    "s_a1", "s_a2", "s_alpha1", "s_alpha2",
-                                                    "s_tc", "sigma", "loglik"),
-                                    inits.fcn = generate_inits_1sex)
+out.file.Laird <- "RData/jags_out_Stenella_Laird.rds"
+if (!file.exists(out.file)){
+  jags.out.Laird <- jags.Laird.growth(jags.data = jags.data.growth,
+                                      MCMC.params = MCMC.params.2,
+                                      out.filename = out.file,
+                                      jags.model = "models/model_two_phase_Laird.jags",
+                                      jags.params = c("L0", "a1", "alpha1", "a2", "alpha2", "tc",
+                                                      "s_a1", "s_a2", "s_alpha1", "s_alpha2",
+                                                      "s_tc", "sigma", "loglik"),
+                                      inits.fcn = generate_inits_1sex)
+  saveRDS(jags.out.Laird,
+          file = out.file.Laird)
+} else {
+  jags.out.Laird <- readRDS(out.file.Laird)
+}
 
 ## Add sex as another factor with additional parameters:
 
@@ -333,16 +350,24 @@ jags.data.growth.sex$sex_growth <- Length.at.Age.data$Sex_idx
 jags.data.growth.sex$N_sex <- max(Length.at.Age.data$Sex_idx)
 jags.data.growth.sex$has_phase2 = c(1, 0, 1)  # Sp1 = Yes, Sp2 = No, Sp3 = Yes
 
-jags.out.Laird.sex <- jags.Laird.growth(jags.data = jags.data.growth.sex,
-                                        MCMC.params = MCMC.params.2,
-                                        out.filename = "RData/jags_out_Stenella_Laird_sex_Linf.rds",
-                                        jags.model = "models/model_two_phase_Laird_sex_Linf.jags",
-                                        jags.params = c("L0", "Lc", "a1", "alpha1", "a2", "alpha2", "tc",
-                                                        "s_a1", "s_a2", "s_alpha1", "s_alpha2",
-                                                        "s_tc", "sigma", "L_inf", "s_L_inf",
-                                                        "mu_a1", "mu_tc", "mu_alpha1", "mu_a2", 
-                                                        "loglik"),
-                                        inits.fcn = generate_inits_sex)
+out.file.Laird.sex <- "RData/jags_out_Stenella_Laird_sex_Linf.rds"
+if (!file.exists(out.file.Laird.sex)){
+  jags.out.Laird.sex <- jags.Laird.growth(jags.data = jags.data.growth.sex,
+                                          MCMC.params = MCMC.params.2,
+                                          out.filename = out.file.Laird.sex,
+                                          jags.model = "models/model_two_phase_Laird_sex_Linf.jags",
+                                          jags.params = c("L0", "Lc", "a1", "alpha1", "a2", "alpha2", "tc",
+                                                          "s_a1", "s_a2", "s_alpha1", "s_alpha2",
+                                                          "s_tc", "sigma", "L_inf", "s_L_inf",
+                                                          "mu_a1", "mu_tc", "mu_alpha1", "mu_a2", 
+                                                          "loglik"),
+                                          inits.fcn = generate_inits_sex)
+  saveRDS(jags.out.Laird.sex,
+          file = out.file.Laird.sex)
+  
+} else {
+  jags.out.Laird.sex <- readRDS(out.file.Laird.sex)
+}
 
 #Test MCMC setup for debugging
 # MCMC.params.2 <- list(n.samples = 1200,
