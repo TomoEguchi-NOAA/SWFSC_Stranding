@@ -77,10 +77,10 @@ for (k in 1:length(table.names)){
     select.col <- table.list[[k]] %>% dplyr::select(-c(Comments, rv))
   }
     
-  # write.csv(select.col,
-  #           file = paste0("Data/", table.name, "_", Sys.Date(), ".csv"),
-  #           quote = FALSE,
-  #           row.names = FALSE)
+  write.csv(select.col,
+            file = paste0("Data/", table.name, "_", Sys.Date(), ".csv"),
+            quote = FALSE,
+            row.names = FALSE)
   
 }
 
