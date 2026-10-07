@@ -112,17 +112,42 @@ jags.Laird.growth <- function(jags.data,
   return(jags.out.)
 }
 
-connection.string <- function(database){
-  # return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-s;Database=",
-  #               database, ";Trusted_Connection=yes;TrustServerCertificate=yes;"))
-  
-  # return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-ut.nmfs.local;Database=",
-  #               database, ";Trusted_Connection=yes;Port=1433;TrustServerCertificate=yes;"))
-  
-  return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-g.nmfs.local;Database=",
-                database, ";Trusted_Connection=yes;Port=1433;TrustServerCertificate=yes;"))
+# connection.string <- function(database){
+#   # return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-s;Database=",
+#   #               database, ";Trusted_Connection=yes;TrustServerCertificate=yes;"))
+#   
+#   # return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-ut.nmfs.local;Database=",
+#   #               database, ";Trusted_Connection=yes;Port=1433;TrustServerCertificate=yes;"))
+#   
+#   return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-g.nmfs.local;Database=",
+#                 database, ";Trusted_Connection=yes;Port=1433;TrustServerCertificate=yes;"))
+# 
+# }
 
+connection.string <- function(database){
+  
+  # Detect the operating system (Returns "Linux" for Ubuntu)
+  os <- Sys.info()["sysname"]
+  
+  # Assign the driver based on OS
+  if (os == "Windows") {
+    return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-g.nmfs.local;Database=",
+                  database, ";Trusted_Connection=yes;Port=1433;TrustServerCertificate=yes;"))
+
+  } else if (os == "Linux") {
+    return(paste0("Driver={ODBC Driver 18 for SQL Server};Server=swc-estrella-g.nmfs.local,1433;Database==",
+                  database, ";Trusted_Connection=yes;TrustServerCertificate=yes;"))
+  } 
+  
 }
+
+# connection.string <- function(database){
+#   driver_name <- "{ODBC Driver 18 for SQL Server}"
+#   
+#   # Appended port to Server with a comma, removed Port= attribute
+#   return(paste0("Driver=", driver_name, ";Server=swc-estrella-g.nmfs.local,1433;Database=",
+#                 database, ";Trusted_Connection=yes;TrustServerCertificate=yes;"))
+# }
 
 # read tables that were extracted by sQL_data_extraction.R
 read.tables <- function(data.extraction.date){
