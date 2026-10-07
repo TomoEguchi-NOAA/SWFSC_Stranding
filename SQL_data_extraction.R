@@ -29,7 +29,7 @@ for (k in 1:length(Common.table.names)){
     select.col <- Common.table.list[[k]] %>% dplyr::select(-c(ts))
 
   write.csv(select.col,
-            file = paste0("Data/", table.name, "_", Sys.Date(), ".csv"),
+            file = paste0("data//", table.name, "_", Sys.Date(), ".csv"),
             quote = FALSE,
             row.names = FALSE)
   
@@ -41,7 +41,7 @@ Common %>%
   select(-c(Comments, ts, NomenclatureAuthority)) -> tbl.Species
 
 write.csv(tbl.Species,
-          file = paste0("Data/tblSpecies_", Sys.Date(), ".csv"),
+          file = paste0("data//tblSpecies_", Sys.Date(), ".csv"),
           quote = FALSE,
           row.names = FALSE)
 
